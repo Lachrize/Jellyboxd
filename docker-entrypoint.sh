@@ -4,6 +4,8 @@ set -e
 mkdir -p /app/data
 
 if [ -n "$DATABASE_URL" ]; then
+  echo "Generating Prisma client..."
+  npx prisma generate
   echo "Applying Prisma schema..."
   npx prisma db push --skip-generate
 fi
