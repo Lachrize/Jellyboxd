@@ -4,12 +4,17 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY package.json package-lock.json ./
-RUN npm ci
+# postinstall runs prisma generate, but schema.prisma is not copied yet in this stage
+RUN npm ci --ignore-scripts
 
 FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 ARG NEXT_PUBLIC_APP_NAME=Jellyboxd
 ARG NEXT_PUBLIC_APP_URL=http://localhost:3002
 ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
