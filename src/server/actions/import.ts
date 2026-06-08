@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { getMediaProvider } from "@/lib/media";
 import { resolveMediaRef } from "@/lib/media/upsert";
+import { ensureSeenMedia } from "@/lib/services/seen";
 import { slugify } from "@/lib/utils";
 import type { MediaProviderName } from "@/lib/constants";
 import type { ActionResult } from "./tracking";
@@ -382,9 +383,17 @@ export async function importLetterboxdRatingsAction(
 
     await db.rating.upsert({
       where: { userId_mediaItemId: { userId: user.id, mediaItemId } },
-      update: { value: rating, createdAt: ratedOn },
-      create: { userId: user.id, mediaItemId, value: rating, createdAt: ratedOn },
+      update: { value: rating, createdAt: ratedOn, sourceTitle: title, importSource: "LETTERBOXD" },
+      create: {
+        userId: user.id,
+        mediaItemId,
+        value: rating,
+        createdAt: ratedOn,
+        sourceTitle: title,
+        importSource: "LETTERBOXD",
+      },
     });
+    await ensureSeenMedia(user.id, mediaItemId);
 
     return { status: existing ? ("updated" as const) : ("imported" as const) };
   });

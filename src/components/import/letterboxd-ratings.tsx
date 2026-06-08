@@ -51,6 +51,10 @@ export function LetterboxdRatingsImportForm() {
           <span className="text-foreground">Rating</span>.
         </p>
         <p className="mt-1">Pour l&apos;instant, seules les notes sont importées. Aucun commentaire n&apos;est créé.</p>
+        <p className="mt-2">
+          Réimportez votre <span className="text-foreground">ratings.csv</span> pour marquer la provenance Letterboxd sur
+          les fiches film.
+        </p>
       </div>
 
       {state?.success && (

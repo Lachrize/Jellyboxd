@@ -5,7 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveEpisode } from "@/lib/media/resolve";
-import { episodeExternalId } from "@/lib/media";
+import { episodeExternalId, seasonExternalId } from "@/lib/media";
 import { getViewerMediaState } from "@/lib/media/viewer-state";
 import { seasonHref } from "@/lib/links";
 import { getMediaReviewSections } from "@/lib/services/reviews";
@@ -13,7 +13,7 @@ import { formatRuntime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { FactsCard, SectionTitle } from "@/components/media/detail-hero";
 import { PublicRatingBadge } from "@/components/media/public-rating-badge";
-import { MediaActions } from "@/components/tracking/media-actions";
+import { SeenToggle } from "@/components/tracking/seen-toggle";
 import { ViewerEntries } from "@/components/tracking/viewer-entries";
 import { ReviewSection } from "@/components/social/review-section";
 
@@ -40,7 +40,12 @@ export default async function EpisodePage({ params }: Params) {
     externalId: episodeExternalId(externalId, seasonNumber, episodeNumber),
     kind: "EPISODE",
   };
-  const state = await getViewerMediaState(episodeRef.externalId, user?.id ?? null, resolved.providerName);
+  const [seriesState, seasonState, state] = await Promise.all([
+    getViewerMediaState(externalId, user?.id ?? null, resolved.providerName),
+    getViewerMediaState(seasonExternalId(externalId, seasonNumber), user?.id ?? null, resolved.providerName),
+    getViewerMediaState(episodeRef.externalId, user?.id ?? null, resolved.providerName),
+  ]);
+  const parentWatched = seriesState.watched || seasonState.watched;
 
   const [reviewSections, viewerEntries] = await Promise.all([
     state.mediaItemId
@@ -96,14 +101,10 @@ export default async function EpisodePage({ params }: Params) {
 
       <div className="grid gap-10 lg:grid-cols-[300px_1fr]">
         <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-          <MediaActions
+          <SeenToggle
             mediaRef={episodeRef}
-            initialRating={state.userRating}
-            initialInWatchlist={state.inWatchlist}
-            initialLiked={state.liked}
+            initialWatched={parentWatched || state.watched}
             isAuthed={Boolean(user)}
-            allowRating={false}
-            defaultVisibility={user?.defaultVisibility ?? "PUBLIC"}
           />
           <FactsCard
             items={[

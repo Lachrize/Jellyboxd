@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Bookmark, BookmarkCheck, Globe, Heart, Lock, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { VISIBILITIES, VISIBILITY_LABELS, type Visibility } from "@/lib/constants";
 import { logWatchAction, rateAction, toggleMediaLikeAction, toggleWatchlistAction } from "@/server/actions/tracking";
+import { SeenToggle } from "./seen-toggle";
 
 export interface MediaRef {
   provider: string;
@@ -24,6 +25,9 @@ const VIS_ICON: Record<Visibility, typeof Globe> = { PUBLIC: Globe, FRIENDS: Use
 export function MediaActions({
   mediaRef,
   initialRating,
+  initialWatched,
+  ratingSourceTitle,
+  ratingImportSource,
   initialInWatchlist,
   initialLiked,
   isAuthed,
@@ -32,6 +36,9 @@ export function MediaActions({
 }: {
   mediaRef: MediaRef;
   initialRating: number | null;
+  initialWatched?: boolean;
+  ratingSourceTitle?: string | null;
+  ratingImportSource?: string | null;
   initialInWatchlist: boolean;
   initialLiked: boolean;
   isAuthed: boolean;
@@ -44,6 +51,12 @@ export function MediaActions({
   const today = new Date().toISOString().slice(0, 10);
 
   const [rating, setRating] = useState<number | null>(initialRating);
+  const hasRating = rating != null;
+  const [seen, setSeen] = useState(Boolean(initialWatched || initialRating));
+
+  useEffect(() => {
+    setSeen(Boolean(initialWatched || initialRating));
+  }, [initialWatched, initialRating]);
   const [inWatchlist, setInWatchlist] = useState(initialInWatchlist);
   const [liked, setLiked] = useState(initialLiked);
   const [visibility, setVisibility] = useState<Visibility>(
@@ -66,11 +79,14 @@ export function MediaActions({
   // Clicking a star saves the rating instantly (and counts the title as seen).
   function quickRate(value: number | null) {
     const prev = rating;
+    const prevSeen = seen;
     setRating(value);
+    if (value != null) setSeen(true);
     startTransition(async () => {
       const res = await rateAction({ ref: mediaRef, value, visibility });
       if (!res.ok) {
         setRating(prev);
+        setSeen(prevSeen);
         toast({ title: "Échec de la notation", description: res.error, variant: "error" });
       } else {
         toast({ title: value ? "Note enregistrée" : "Note retirée", variant: "success" });
@@ -143,7 +159,23 @@ export function MediaActions({
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-muted">Votre journal</p>
           <p className="mt-1 text-sm text-muted-foreground">Notez, critiquez ou enregistrez ce visionnage.</p>
+          {ratingImportSource === "LETTERBOXD" ? (
+            <p className="mt-2 rounded-lg border border-accent/20 bg-accent/8 px-2.5 py-1.5 text-xs text-muted-foreground">
+              Source : fichier Letterboxd
+              {ratingSourceTitle ? (
+                <span className="block truncate text-[11px]">Titre importé : {ratingSourceTitle}</span>
+              ) : null}
+            </p>
+          ) : null}
         </div>
+
+        <SeenToggle
+          mediaRef={mediaRef}
+          initialWatched={seen}
+          locked={hasRating}
+          onWatchedChange={setSeen}
+          isAuthed={isAuthed}
+        />
 
         {allowRating && (
           <div>

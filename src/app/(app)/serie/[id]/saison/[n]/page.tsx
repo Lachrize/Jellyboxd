@@ -10,8 +10,8 @@ import { getViewerMediaState } from "@/lib/media/viewer-state";
 import { episodeHref, seriesHref } from "@/lib/links";
 import { Badge } from "@/components/ui/badge";
 import { DetailHero, SectionTitle } from "@/components/media/detail-hero";
-import { MediaActions } from "@/components/tracking/media-actions";
 import { EpisodeRow } from "@/components/tracking/episode-row";
+import { SeenToggle } from "@/components/tracking/seen-toggle";
 
 type Params = { params: Promise<{ id: string; n: string }> };
 
@@ -37,11 +37,14 @@ export default async function SeasonPage({ params }: Params) {
     externalId: seasonExternalId(externalId, seasonNumber),
     kind: "SEASON",
   };
-  const state = await getViewerMediaState(seasonRef.externalId, user?.id ?? null, providerName);
+  const [seriesState, seasonState] = await Promise.all([
+    getViewerMediaState(externalId, user?.id ?? null, providerName),
+    getViewerMediaState(seasonRef.externalId, user?.id ?? null, providerName),
+  ]);
 
   const watched = new Set<number>();
   if (user) {
-    const entries = await db.watchEntry.findMany({
+    const entries = await db.seenMedia.findMany({
       where: {
         userId: user.id,
         mediaItem: {
@@ -60,7 +63,8 @@ export default async function SeasonPage({ params }: Params) {
   }
 
   const total = season.episodes.length;
-  const seen = season.episodes.filter((e) => watched.has(e.episodeNumber)).length;
+  const parentWatched = seriesState.watched || seasonState.watched;
+  const seen = parentWatched ? total : season.episodes.filter((e) => watched.has(e.episodeNumber)).length;
   const pct = total ? Math.round((seen / total) * 100) : 0;
 
   return (
@@ -88,14 +92,10 @@ export default async function SeasonPage({ params }: Params) {
 
       <div className="grid gap-10 lg:grid-cols-[300px_1fr]">
         <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-          <MediaActions
+          <SeenToggle
             mediaRef={seasonRef}
-            initialRating={state.userRating}
-            initialInWatchlist={state.inWatchlist}
-            initialLiked={state.liked}
+            initialWatched={parentWatched || (total > 0 && seen === total)}
             isAuthed={Boolean(user)}
-            allowRating={false}
-            defaultVisibility={user?.defaultVisibility ?? "PUBLIC"}
           />
           {user && total > 0 && (
             <div className="surface-card p-4">
@@ -125,7 +125,7 @@ export default async function SeasonPage({ params }: Params) {
                   providerName={providerName}
                   episode={e}
                   href={episodeHref(externalId, seasonNumber, e.episodeNumber)}
-                  initialWatched={watched.has(e.episodeNumber)}
+                  initialWatched={parentWatched || watched.has(e.episodeNumber)}
                   isAuthed={Boolean(user)}
                 />
               ))}

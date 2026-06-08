@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BarChart3, Clapperboard, Clock, Film, Star, Tv, type LucideIcon } from "lucide-react";
-import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
+import { getUserStatsEntries } from "@/lib/services/stats";
 import { Stars } from "@/components/ui/stars";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionTitle } from "@/components/media/detail-hero";
@@ -67,19 +67,7 @@ export default async function StatsPage({
   const selectedRating = ratingParam && RATING_VALUES.includes(ratingParam) ? ratingParam : null;
   const minRuntime = runtimeParam && RUNTIME_VALUES.includes(runtimeParam) ? runtimeParam : null;
 
-  const entries = await db.watchEntry.findMany({
-    where: { userId: user.id },
-    select: {
-      rating: true,
-      mediaItem: {
-        select: {
-          kind: true,
-          runtime: true,
-          genres: { select: { name: true } },
-        },
-      },
-    },
-  });
+  const entries = await getUserStatsEntries(user.id);
 
   const availableGenres = [
     ...new Set(entries.flatMap((entry) => entry.mediaItem.genres.map((genre) => genre.name))),
@@ -95,7 +83,11 @@ export default async function StatsPage({
 
   const films = filteredEntries.filter((e) => e.mediaItem.kind === "MOVIE").length;
   const series = filteredEntries.filter((e) => e.mediaItem.kind === "SERIES").length;
-  const episodes = filteredEntries.filter((e) => e.mediaItem.kind === "EPISODE").length;
+  const standaloneEpisodes = filteredEntries.filter((e) => e.mediaItem.kind === "EPISODE").length;
+  const seriesEpisodes = filteredEntries
+    .filter((e) => e.mediaItem.kind === "SERIES")
+    .reduce((sum, e) => sum + (e.mediaItem.series?.totalEpisodes ?? 0), 0);
+  const episodes = standaloneEpisodes + seriesEpisodes;
   const totalMinutes = filteredEntries.reduce((sum, e) => sum + (e.mediaItem.runtime ?? 0), 0);
   const hours = Math.round(totalMinutes / 60);
   const filteredRatings = filteredEntries
@@ -128,7 +120,7 @@ export default async function StatsPage({
         <EmptyState
           icon={BarChart3}
           title="Pas encore de données"
-          description="Journalisez et notez des œuvres pour voir vos statistiques prendre vie."
+          description="Notez ou journalisez des œuvres pour voir vos statistiques prendre vie."
         />
       </div>
     );
@@ -226,9 +218,9 @@ export default async function StatsPage({
       ) : (
         <>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <StatCard icon={Clapperboard} value={String(filteredEntries.length)} label="Visionnages" />
-        <StatCard icon={Film} value={String(films)} label="Films journalisés" />
-        <StatCard icon={Tv} value={String(series)} label="Séries journalisées" />
+        <StatCard icon={Clapperboard} value={String(filteredEntries.length)} label="Œuvres vues" />
+        <StatCard icon={Film} value={String(films)} label="Films" />
+        <StatCard icon={Tv} value={String(series)} label="Séries" />
         <StatCard icon={Clapperboard} value={String(episodes)} label="Épisodes vus" />
         <StatCard icon={Clock} value={`${hours} h`} label="Temps de visionnage" />
       </div>

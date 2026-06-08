@@ -7,6 +7,7 @@ import { resolveSeries } from "@/lib/media/resolve";
 import { seasonHref } from "@/lib/links";
 import { getViewerMediaState } from "@/lib/media/viewer-state";
 import { getMediaReviewSections } from "@/lib/services/reviews";
+import { getViewerActivityEntries } from "@/lib/services/viewer-activity";
 import { formatRuntime, formatYearRange } from "@/lib/utils";
 import type { SeriesStatus } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
@@ -51,15 +52,46 @@ export default async function SeriesPage({ params }: Params) {
     state.mediaItemId
       ? getMediaReviewSections(state.mediaItemId, user?.id ?? null)
       : Promise.resolve({ friends: [], community: [] }),
-    user && state.mediaItemId
-      ? db.watchEntry.findMany({
-          where: { userId: user.id, mediaItemId: state.mediaItemId },
-          orderBy: { watchedOn: "desc" },
-          take: 1,
-          include: { review: { select: { body: true, containsSpoilers: true } } },
-        })
-      : Promise.resolve([]),
+    getViewerActivityEntries(user?.id, state.mediaItemId),
   ]);
+  const totalEpisodes = series.seasons.reduce((sum, season) => sum + (season.episodeCount ?? 0), 0);
+  const seriesWatchEntries =
+    user && state.seriesId && !state.watched
+      ? await db.seenMedia.findMany({
+          where: {
+            userId: user.id,
+            mediaItem: {
+              OR: [
+                { season: { seriesId: state.seriesId } },
+                { episode: { seriesId: state.seriesId } },
+              ],
+            },
+          },
+          select: {
+            mediaItem: {
+              select: {
+                season: { select: { seasonNumber: true } },
+                episode: { select: { seasonNumber: true, episodeNumber: true } },
+              },
+            },
+          },
+        })
+      : [];
+  const watchedSeasons = new Set<number>();
+  const watchedEpisodes = new Set<string>();
+  for (const entry of seriesWatchEntries) {
+    const seasonEntry = entry.mediaItem.season;
+    if (seasonEntry) watchedSeasons.add(seasonEntry.seasonNumber);
+    const episodeEntry = entry.mediaItem.episode;
+    if (episodeEntry) watchedEpisodes.add(`${episodeEntry.seasonNumber}:${episodeEntry.episodeNumber}`);
+  }
+  const seenEpisodes = state.watched
+    ? totalEpisodes
+    : series.seasons.reduce((sum, season) => {
+        if (watchedSeasons.has(season.seasonNumber)) return sum + (season.episodeCount ?? 0);
+        return sum + [...watchedEpisodes].filter((key) => key.startsWith(`${season.seasonNumber}:`)).length;
+      }, 0);
+  const progressPct = totalEpisodes ? Math.round((seenEpisodes / totalEpisodes) * 100) : 0;
 
   return (
     <div className="space-y-10">
@@ -92,12 +124,26 @@ export default async function SeriesPage({ params }: Params) {
           <MediaActions
             mediaRef={mediaRef}
             initialRating={state.userRating}
+            initialWatched={state.watched}
             initialInWatchlist={state.inWatchlist}
             initialLiked={state.liked}
             isAuthed={Boolean(user)}
             defaultVisibility={user?.defaultVisibility ?? "PUBLIC"}
           />
           <SeriesStatusControl mediaRef={mediaRef} initialStatus={state.seriesStatus} isAuthed={Boolean(user)} />
+          {user && totalEpisodes > 0 && (
+            <div className="surface-card p-4">
+              <div className="mb-2 flex items-center justify-between text-sm">
+                <span className="text-muted">Progression</span>
+                <span className="font-medium text-foreground">
+                  {seenEpisodes}/{totalEpisodes} épisodes
+                </span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-surface-3">
+                <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${progressPct}%` }} />
+              </div>
+            </div>
+          )}
           <FactsCard
             items={[
               { label: "Statut", value: STATUS_LABEL[series.status] },
@@ -166,14 +212,7 @@ export default async function SeriesPage({ params }: Params) {
             <section>
               <SectionTitle>Votre avis</SectionTitle>
               <ViewerEntries
-                entries={viewerEntries.map((e) => ({
-                  id: e.id,
-                  watchedOn: e.watchedOn,
-                  rating: e.rating,
-                  rewatch: e.rewatch,
-                  liked: e.liked,
-                  review: e.review,
-                }))}
+                entries={viewerEntries}
               />
             </section>
           )}

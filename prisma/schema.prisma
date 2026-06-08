@@ -39,6 +39,7 @@ model User {
   ratings         Rating[]
   reviews         Review[]
   watchEntries    WatchEntry[]
+  seenMedia       SeenMedia[]
   lists           List[]
   seriesProgress  SeriesProgress[]
   activities      Activity[]
@@ -140,6 +141,7 @@ model MediaItem {
   ratings          Rating[]
   reviews          Review[]
   watchEntries     WatchEntry[]
+  seenBy           SeenMedia[]
   listItems        ListItem[]
   activities       Activity[]
 
@@ -246,7 +248,9 @@ model Rating {
   userId      String
   mediaItemId String
   value       Int // 1..10 (half-star granularity)
-  visibility  String   @default("PUBLIC") // PUBLIC | FRIENDS | PRIVATE
+  sourceTitle  String? // original title from an external import, e.g. Letterboxd CSV
+  importSource String? // LETTERBOXD when created via CSV import
+  visibility   String   @default("PUBLIC") // PUBLIC | FRIENDS | PRIVATE
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -297,6 +301,20 @@ model WatchEntry {
   tags      Tag[]
 
   @@index([userId, watchedOn])
+  @@index([mediaItemId])
+}
+
+/// Explicit "seen" flag, independent from notes, reviews and diary entries.
+model SeenMedia {
+  id          String   @id @default(cuid())
+  userId      String
+  mediaItemId String
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItem MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaItemId])
   @@index([mediaItemId])
 }
 

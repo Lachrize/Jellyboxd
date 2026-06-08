@@ -6,6 +6,9 @@ export interface ViewerMediaState {
   mediaItemId: string | null;
   seriesId: string | null;
   userRating: number | null;
+  ratingSourceTitle: string | null;
+  ratingImportSource: string | null;
+  watched: boolean;
   inWatchlist: boolean;
   liked: boolean;
   seriesStatus: WatchProgressStatus | null;
@@ -31,11 +34,28 @@ export async function getViewerMediaState(
   const seriesId = mapping?.mediaItem.series?.id ?? null;
 
   if (!mediaItemId || !userId) {
-    return { mediaItemId, seriesId, userRating: null, inWatchlist: false, liked: false, seriesStatus: null };
+    return {
+      mediaItemId,
+      seriesId,
+      userRating: null,
+      ratingSourceTitle: null,
+      ratingImportSource: null,
+      watched: false,
+      inWatchlist: false,
+      liked: false,
+      seriesStatus: null,
+    };
   }
 
-  const [rating, watchlist, liked, progress] = await Promise.all([
-    db.rating.findUnique({ where: { userId_mediaItemId: { userId, mediaItemId } }, select: { value: true } }),
+  const [rating, seen, watchlist, liked, progress] = await Promise.all([
+    db.rating.findUnique({
+      where: { userId_mediaItemId: { userId, mediaItemId } },
+      select: { value: true, sourceTitle: true, importSource: true },
+    }),
+    db.seenMedia.findUnique({
+      where: { userId_mediaItemId: { userId, mediaItemId } },
+      select: { id: true },
+    }),
     db.list
       .findFirst({ where: { userId, kind: "WATCHLIST" }, select: { id: true } })
       .then((wl) =>
@@ -62,6 +82,9 @@ export async function getViewerMediaState(
     mediaItemId,
     seriesId,
     userRating: rating?.value ?? null,
+    ratingSourceTitle: rating?.sourceTitle ?? null,
+    ratingImportSource: rating?.importSource ?? null,
+    watched: Boolean(seen || rating),
     inWatchlist: Boolean(watchlist),
     liked: Boolean(liked),
     seriesStatus: (progress?.status as WatchProgressStatus | undefined) ?? null,

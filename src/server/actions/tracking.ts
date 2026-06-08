@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { resolveMediaRef } from "@/lib/media/upsert";
 import { recordActivity } from "@/lib/services/activity";
 import { getOrCreateWatchlist } from "@/lib/services/lists";
+import { ensureSeenMedia } from "@/lib/services/seen";
 import { slugify } from "@/lib/utils";
 import { WATCH_PROGRESS_STATUSES } from "@/lib/constants";
 import { logWatchSchema, rateSchema } from "@/lib/validation/tracking";
@@ -70,6 +71,7 @@ export async function rateAction(input: unknown): Promise<ActionResult> {
     await db.activity.deleteMany({
       where: { actorId: user.id, mediaItemId, type: "RATED" },
     });
+    await ensureSeenMedia(user.id, mediaItemId);
     await recordActivity({
       actorId: user.id,
       type: "RATED",
@@ -162,6 +164,8 @@ export async function logWatchAction(input: unknown): Promise<ActionResult> {
           ...(reviewId ? {} : tags ? { tags } : {}),
         },
       });
+
+  await ensureSeenMedia(user.id, mediaItemId);
 
   await db.watchEntry.deleteMany({
     where: { userId: user.id, mediaItemId, NOT: { id: entry.id } },
@@ -267,8 +271,8 @@ export async function quickLogAction(ref: unknown): Promise<ActionResult> {
   return logWatchAction({ ref });
 }
 
-/** Toggle an episode's watched state (one-tap from the season page). */
-export async function setEpisodeWatchedAction(input: {
+/** Toggle a bare "seen" state without requiring a rating, review or diary note. */
+export async function setMediaWatchedAction(input: {
   ref: unknown;
   watched: boolean;
 }): Promise<ActionResult<{ watched: boolean }>> {
@@ -277,26 +281,57 @@ export async function setEpisodeWatchedAction(input: {
   if (!parsed.success) return { ok: false, error: "Données invalides." };
 
   const mediaItemId = await resolveMediaRef(parsed.data);
-  if (!mediaItemId) return { ok: false, error: "Épisode introuvable." };
+  if (!mediaItemId) return { ok: false, error: "Œuvre introuvable." };
 
   if (input.watched) {
-    const existing = await db.watchEntry.findFirst({ where: { userId: user.id, mediaItemId } });
+    const existing = await db.seenMedia.findUnique({
+      where: { userId_mediaItemId: { userId: user.id, mediaItemId } },
+      select: { id: true },
+    });
     if (!existing) {
-      await db.watchEntry.create({
-        data: { userId: user.id, mediaItemId, watchedOn: new Date(), visibility: user.defaultVisibility },
-      });
+      await ensureSeenMedia(user.id, mediaItemId);
       await recordActivity({
         actorId: user.id,
-        type: "EPISODE_WATCHED",
+        type: parsed.data.kind === "EPISODE" ? "EPISODE_WATCHED" : "LOGGED",
         mediaItemId,
         visibility: user.defaultVisibility,
       });
     }
   } else {
-    await db.watchEntry.deleteMany({ where: { userId: user.id, mediaItemId } });
+    const rating = await db.rating.findUnique({
+      where: { userId_mediaItemId: { userId: user.id, mediaItemId } },
+      select: { id: true },
+    });
+    if (rating) {
+      return { ok: false, error: "Retirez votre note pour marquer comme non vu." };
+    }
+
+    await db.seenMedia.deleteMany({
+      where: { userId: user.id, mediaItemId },
+    });
   }
+
+  const [seen, rating] = await Promise.all([
+    db.seenMedia.findUnique({
+      where: { userId_mediaItemId: { userId: user.id, mediaItemId } },
+      select: { id: true },
+    }),
+    db.rating.findUnique({
+      where: { userId_mediaItemId: { userId: user.id, mediaItemId } },
+      select: { id: true },
+    }),
+  ]);
+
   refreshFeeds();
-  return { ok: true, data: { watched: input.watched } };
+  return { ok: true, data: { watched: Boolean(seen || rating) } };
+}
+
+/** Toggle an episode's watched state (one-tap from the season page). */
+export async function setEpisodeWatchedAction(input: {
+  ref: unknown;
+  watched: boolean;
+}): Promise<ActionResult<{ watched: boolean }>> {
+  return setMediaWatchedAction(input);
 }
 
 /** Like / unlike a media item (personal favourites). Returns the new state. */

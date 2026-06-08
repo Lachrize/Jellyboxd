@@ -1,11 +1,11 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { Calendar, Clock, Globe, User } from "lucide-react";
-import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveMovie } from "@/lib/media/resolve";
 import { getViewerMediaState } from "@/lib/media/viewer-state";
 import { getMediaReviewSections } from "@/lib/services/reviews";
+import { getViewerActivityEntries } from "@/lib/services/viewer-activity";
 import { formatRuntime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { CinematicDetailHero, FactsCard, SectionTitle } from "@/components/media/detail-hero";
@@ -47,14 +47,7 @@ export default async function MoviePage({ params }: Params) {
     state.mediaItemId
       ? getMediaReviewSections(state.mediaItemId, user?.id ?? null)
       : Promise.resolve({ friends: [], community: [] }),
-    user && state.mediaItemId
-      ? db.watchEntry.findMany({
-          where: { userId: user.id, mediaItemId: state.mediaItemId },
-          orderBy: { watchedOn: "desc" },
-          take: 1,
-          include: { review: { select: { body: true, containsSpoilers: true } } },
-        })
-      : Promise.resolve([]),
+    getViewerActivityEntries(user?.id, state.mediaItemId),
   ]);
 
   const releaseYear = movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : movie.year;
@@ -92,6 +85,9 @@ export default async function MoviePage({ params }: Params) {
           <MediaActions
             mediaRef={mediaRef}
             initialRating={state.userRating}
+            initialWatched={state.watched}
+            ratingSourceTitle={state.ratingSourceTitle}
+            ratingImportSource={state.ratingImportSource}
             initialInWatchlist={state.inWatchlist}
             initialLiked={state.liked}
             isAuthed={Boolean(user)}
@@ -120,14 +116,7 @@ export default async function MoviePage({ params }: Params) {
             <section className="surface-card p-5 sm:p-7">
               <SectionTitle>Votre avis</SectionTitle>
               <ViewerEntries
-                entries={viewerEntries.map((e) => ({
-                  id: e.id,
-                  watchedOn: e.watchedOn,
-                  rating: e.rating,
-                  rewatch: e.rewatch,
-                  liked: e.liked,
-                  review: e.review,
-                }))}
+                entries={viewerEntries}
               />
             </section>
           )}
