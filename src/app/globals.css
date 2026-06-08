@@ -1,0 +1,171 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root,
+  [data-theme="light"] {
+    color-scheme: light;
+
+    --background: 250 247 253;
+    --surface: 255 255 255;
+    --surface-2: 245 240 252;
+    --surface-3: 235 227 248;
+    --border: 221 213 235;
+    --border-strong: 196 184 220;
+    --foreground: 26 16 40;
+    --muted: 107 95 128;
+    --muted-foreground: 88 76 112;
+    --accent: 124 58 237;
+    --accent-foreground: 255 255 255;
+    --accent-hover: 109 40 217;
+    --input: 255 255 255;
+    --overlay: 26 16 40;
+    --success: 34 150 110;
+    --danger: 220 80 90;
+    --warning: 210 150 50;
+
+    --shadow-card: 0 1px 2px rgb(26 16 40 / 0.04), 0 4px 16px rgb(124 58 237 / 0.06);
+    --shadow-card-hover: 0 4px 24px rgb(124 58 237 / 0.12);
+    --shadow-glow: 0 0 0 1px rgb(124 58 237 / 0.2), 0 8px 32px rgb(124 58 237 / 0.15);
+  }
+
+  [data-theme="dark"] {
+    color-scheme: dark;
+
+    --background: 15 11 20;
+    --surface: 23 18 32;
+    --surface-2: 31 24 41;
+    --surface-3: 40 32 53;
+    --border: 53 45 66;
+    --border-strong: 72 62 88;
+    --foreground: 245 240 250;
+    --muted: 155 143 176;
+    --muted-foreground: 176 164 196;
+    --accent: 167 139 250;
+    --accent-foreground: 15 11 20;
+    --accent-hover: 196 181 253;
+    --input: 23 18 32;
+    --overlay: 15 11 20;
+    --success: 111 191 139;
+    --danger: 229 120 107;
+    --warning: 224 177 90;
+
+    --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 8px 30px -12px rgb(0 0 0 / 0.5);
+    --shadow-card-hover: 0 1px 0 0 rgb(255 255 255 / 0.05) inset, 0 18px 50px -16px rgb(0 0 0 / 0.6);
+    --shadow-glow: 0 0 0 1px rgb(167 139 250 / 0.25), 0 8px 40px -8px rgb(167 139 250 / 0.2);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "ss01", "cv01";
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgb(var(--accent) / 0.25);
+    color: rgb(var(--foreground));
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent/50 ring-offset-2 ring-offset-background;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--border-strong));
+    border: 2px solid rgb(var(--background));
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--muted));
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-serif;
+    text-wrap: balance;
+  }
+}
+
+@layer components {
+  .poster-fallback {
+    @apply relative flex h-full w-full flex-col justify-end overflow-hidden p-3;
+    background:
+      radial-gradient(120% 80% at 30% 0%, rgb(var(--accent) / 0.12), transparent 60%),
+      linear-gradient(160deg, rgb(var(--surface-3)) 0%, rgb(var(--surface-2)) 55%, rgb(var(--surface)) 100%);
+  }
+  .poster-fallback::before {
+    content: "";
+    @apply pointer-events-none absolute inset-0 opacity-[0.04];
+    background-image: linear-gradient(rgb(var(--foreground) / 0.5) 1px, transparent 1px);
+    background-size: 100% 7px;
+  }
+
+  .hairline {
+    @apply border-t border-border;
+  }
+
+  .surface-card {
+    @apply rounded-2xl border border-border bg-surface shadow-card;
+  }
+
+  .link-underline {
+    @apply underline-offset-4 transition-colors hover:text-foreground hover:underline;
+  }
+
+  .shimmer {
+    @apply relative overflow-hidden bg-surface-2;
+  }
+  .shimmer::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full;
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--foreground) / 0.05),
+      transparent
+    );
+    animation: shimmer 1.6s infinite;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

@@ -1,0 +1,21 @@
+services:
+  jellyboxd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_NAME: Jellyboxd
+        NEXT_PUBLIC_APP_URL: http://localhost:3002
+    container_name: jellyboxd
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: file:/app/data/jellyboxd.db
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./data:/app/data

@@ -1,0 +1,33 @@
+{
+  "name": "Jellyboxd — Le carnet de tout ce que vous regardez",
+  "short_name": "Jellyboxd",
+  "description": "Notez, critiquez et suivez vos films et séries. Un carnet de visionnage social et élégant.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f0b14",
+  "theme_color": "#7c3aed",
+  "categories": ["entertainment", "social", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Explorer", "url": "/explore" },
+    { "name": "Journal", "url": "/journal" },
+    { "name": "Recherche", "url": "/search" }
+  ]
+}

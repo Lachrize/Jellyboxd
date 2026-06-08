@@ -1,0 +1,444 @@
+// Jellyboxd — data model
+// -------------------------------------------------------------------------
+// Provider is SQLite for zero-config local dev. The schema is written to be
+// portable to PostgreSQL: swap `provider` + DATABASE_URL and it migrates 1:1.
+//
+// SQLite caveats handled here:
+//   - No native enums  -> string columns with documented allowed values,
+//     enforced by Zod/TS unions (see src/lib/constants.ts).
+//   - No scalar lists  -> genres modelled as a proper many-to-many relation.
+// -------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+// Identity & auth
+// ===========================================================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  name         String?
+  bio          String?
+  avatarUrl    String?
+  defaultVisibility String @default("PUBLIC") // remembered default for new notes
+  // Single special list created on signup (kind = WATCHLIST) is found by query.
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions        Session[]
+  ratings         Rating[]
+  reviews         Review[]
+  watchEntries    WatchEntry[]
+  lists           List[]
+  seriesProgress  SeriesProgress[]
+  activities      Activity[]
+  likes           Like[]
+  comments        Comment[]
+  importSources   ImportSource[]
+
+  following Follow[] @relation("Follower")
+  followers Follow[] @relation("Following")
+
+  friendshipsSent     Friendship[] @relation("FriendRequester")
+  friendshipsReceived Friendship[] @relation("FriendAddressee")
+
+  @@index([createdAt])
+}
+
+/// Mutual friendship with an explicit request/accept flow.
+/// A single row per pair (requester -> addressee). status: PENDING | ACCEPTED.
+model Friendship {
+  id          String    @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  requester User @relation("FriendRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique // sha-256 of the random session token stored in the cookie
+  expiresAt DateTime
+  userAgent String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followingId])
+}
+
+// ===========================================================================
+// Media catalogue (source-agnostic spine + typed detail tables)
+// ===========================================================================
+
+/// The central media node. Movies, series, seasons and episodes are all
+/// MediaItems so ratings/reviews/diary/lists/activity can reference any of
+/// them uniformly. Type-specific structure lives in the 1:1 detail tables.
+model MediaItem {
+  id              String    @id @default(cuid())
+  kind            String // MediaKind: MOVIE | SERIES | SEASON | EPISODE
+  slug            String    @unique
+  title           String
+  sortTitle       String?
+  originalTitle   String?
+  overview        String?
+  tagline         String?
+  releaseDate     DateTime?
+  year            Int?
+  runtime         Int? // minutes
+  posterUrl       String?
+  backdropUrl     String?
+  stillUrl        String? // episode stills
+  voteAverage     Float? // external rating (e.g. TMDB), 0-10
+  popularity      Float?
+  originalLanguage String?
+  status          String? // SeriesStatus for series
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  movie   Movie?
+  series  Series?
+  season  Season?
+  episode Episode?
+
+  genres           Genre[]
+  externalMappings ExternalMapping[]
+  ratings          Rating[]
+  reviews          Review[]
+  watchEntries     WatchEntry[]
+  listItems        ListItem[]
+  activities       Activity[]
+
+  @@index([kind])
+  @@index([popularity])
+  @@index([year])
+}
+
+model Movie {
+  id            String    @id @default(cuid())
+  mediaItemId   String    @unique
+  director      String?
+  certification String?
+  budget        Int?
+  revenue       Int?
+
+  mediaItem MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+}
+
+model Series {
+  id            String    @id @default(cuid())
+  mediaItemId   String    @unique
+  status        String    @default("UNKNOWN") // SeriesStatus
+  firstAirDate  DateTime?
+  lastAirDate   DateTime?
+  network       String?
+  totalSeasons  Int?
+  totalEpisodes Int?
+
+  mediaItem MediaItem        @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  seasons   Season[]
+  episodes  Episode[]
+  progress  SeriesProgress[]
+}
+
+model Season {
+  id           String    @id @default(cuid())
+  mediaItemId  String    @unique
+  seriesId     String
+  seasonNumber Int
+  episodeCount Int?
+  airDate      DateTime?
+
+  mediaItem MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  series    Series    @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  episodes  Episode[]
+
+  @@unique([seriesId, seasonNumber])
+  @@index([seriesId])
+}
+
+model Episode {
+  id            String    @id @default(cuid())
+  mediaItemId   String    @unique
+  seasonId      String
+  seriesId      String
+  seasonNumber  Int
+  episodeNumber Int
+  airDate       DateTime?
+
+  mediaItem MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  season    Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  series    Series    @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, episodeNumber])
+  @@index([seriesId])
+}
+
+model Genre {
+  id     String @id @default(cuid())
+  tmdbId Int?   @unique
+  name   String
+  slug   String @unique
+
+  mediaItems MediaItem[]
+}
+
+/// Maps a local MediaItem to identifiers in external sources (TMDB today,
+/// Jellyfin / IMDb / TVDB later). The (provider, externalId) pair is the
+/// dedup key used by the upsert pipeline and the future Jellyfin sync.
+model ExternalMapping {
+  id          String   @id @default(cuid())
+  mediaItemId String
+  provider    String // MediaProvider: TMDB | JELLYFIN | IMDB | TVDB | SEED
+  externalId  String
+  extra       String? // JSON blob of provider-specific data
+  createdAt   DateTime @default(now())
+
+  mediaItem MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalId])
+  @@unique([mediaItemId, provider])
+  @@index([mediaItemId])
+}
+
+// ===========================================================================
+// Tracking: ratings, reviews, diary, series progress
+// ===========================================================================
+
+/// Canonical *current* rating of a media item by a user (half-stars stored as
+/// an int 1..10 == 0.5..5.0). Kept in sync with the latest rated log/review.
+model Rating {
+  id          String   @id @default(cuid())
+  userId      String
+  mediaItemId String
+  value       Int // 1..10 (half-star granularity)
+  visibility  String   @default("PUBLIC") // PUBLIC | FRIENDS | PRIVATE
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItem MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaItemId])
+  @@index([mediaItemId])
+}
+
+model Review {
+  id              String   @id @default(cuid())
+  userId          String
+  mediaItemId     String
+  body            String
+  rating          Int? // snapshot at time of writing (1..10)
+  containsSpoilers Boolean @default(false)
+  visibility      String  @default("PUBLIC") // PUBLIC | FRIENDS | PRIVATE
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItem   MediaItem    @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  watchEntry  WatchEntry?
+  tags        Tag[]
+
+  @@index([mediaItemId])
+  @@index([userId, createdAt])
+}
+
+/// A diary log: "I watched X on date Y". The workhorse of the journal.
+/// May carry a rating snapshot and/or link to a Review.
+model WatchEntry {
+  id          String   @id @default(cuid())
+  userId      String
+  mediaItemId String
+  watchedOn   DateTime // the date the user assigns to the viewing
+  rewatch     Boolean  @default(false)
+  rating      Int? // snapshot (1..10)
+  reviewId    String?  @unique
+  liked       Boolean  @default(false)
+  visibility  String   @default("PUBLIC") // PUBLIC | FRIENDS | PRIVATE
+  createdAt   DateTime @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItem MediaItem  @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  review    Review?    @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+  tags      Tag[]
+
+  @@index([userId, watchedOn])
+  @@index([mediaItemId])
+}
+
+/// Per-user, per-series viewing status: en cours / terminée / en pause / abandonnée.
+model SeriesProgress {
+  id          String    @id @default(cuid())
+  userId      String
+  seriesId    String
+  status      String    @default("WATCHING") // WatchProgressStatus
+  startedAt   DateTime?
+  completedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  series Series @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, seriesId])
+  @@index([seriesId])
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String
+  slug String @unique
+
+  watchEntries WatchEntry[]
+  reviews      Review[]
+}
+
+// ===========================================================================
+// Lists
+// ===========================================================================
+
+model List {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  slug        String
+  description String?
+  kind        String   @default("CUSTOM") // ListKind: CUSTOM | WATCHLIST | REWATCH | COLLECTION
+  isRanked    Boolean  @default(false)
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items ListItem[]
+
+  @@unique([userId, slug])
+  @@index([userId])
+}
+
+model ListItem {
+  id          String   @id @default(cuid())
+  listId      String
+  mediaItemId String
+  position    Int      @default(0)
+  note        String?
+  addedAt     DateTime @default(now())
+
+  list      List      @relation(fields: [listId], references: [id], onDelete: Cascade)
+  mediaItem MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, mediaItemId])
+  @@index([listId])
+}
+
+// ===========================================================================
+// Social: likes, comments, activity feed
+// ===========================================================================
+
+/// Generic like. targetType + targetId let one table cover reviews, diary
+/// entries, lists and comments without polymorphic FKs.
+model Like {
+  id         String   @id @default(cuid())
+  userId     String
+  targetType String // LikeTarget: REVIEW | WATCH_ENTRY | LIST | COMMENT
+  targetId   String
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId])
+  @@index([targetType, targetId])
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  userId     String
+  targetType String // REVIEW | WATCH_ENTRY | LIST
+  targetId   String
+  body       String
+  parentId   String?
+  createdAt  DateTime @default(now())
+
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("CommentReplies")
+
+  @@index([targetType, targetId])
+}
+
+/// Denormalised social activity stream. Generated by the service layer when a
+/// user logs, rates, reviews, follows, etc. The feed reads activities by author.
+model Activity {
+  id          String   @id @default(cuid())
+  actorId     String
+  type        String // ActivityType (see constants)
+  mediaItemId String?
+  targetType  String?
+  targetId    String?
+  data        String? // JSON for extra context (rating, list title, ...)
+  visibility  String   @default("PUBLIC") // mirrors the underlying note's visibility
+  createdAt   DateTime @default(now())
+
+  actor     User       @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  mediaItem MediaItem? @relation(fields: [mediaItemId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+// ===========================================================================
+// External sources (Jellyfin-ready)
+// ===========================================================================
+
+/// A configured external library/source for a user. The first-class citizen of
+/// the future Jellyfin integration: connect a server, then sync its library
+/// into MediaItem/ExternalMapping and watch state into WatchEntry.
+model ImportSource {
+  id           String    @id @default(cuid())
+  userId       String
+  kind         String // ImportKind: JELLYFIN | TRAKT | TMDB | CSV
+  name         String
+  baseUrl      String?
+  status       String    @default("DISCONNECTED") // ImportStatus
+  config       String? // JSON: tokens, library ids (never expose secrets to client)
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
