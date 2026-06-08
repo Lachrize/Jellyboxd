@@ -112,12 +112,29 @@ class TmdbProvider implements MediaProvider {
   readonly name = "TMDB" as const;
 
   async search(query: string): Promise<MediaSummary[]> {
-    const data = await tmdbFetch<{ results: TmdbResult[] }>("/search/multi", {
-      query,
-      include_adult: "false",
-    });
-    if (!data) return [];
-    const results = data.results.filter((r) => r.media_type === "movie" || r.media_type === "tv");
+    const pages = await Promise.all([
+      tmdbFetch<{ results: TmdbResult[] }>("/search/multi", {
+        query,
+        include_adult: "false",
+        language: "fr-FR",
+      }),
+      tmdbFetch<{ results: TmdbResult[] }>("/search/multi", {
+        query,
+        include_adult: "false",
+        language: "en-US",
+      }),
+    ]);
+
+    const seen = new Set<string>();
+    const results = pages
+      .flatMap((data) => data?.results ?? [])
+      .filter((r) => r.media_type === "movie" || r.media_type === "tv")
+      .filter((r) => {
+        const key = `${r.media_type}-${r.id}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     return Promise.all(results.map((r) => toSummary(r)));
   }
 

@@ -16,6 +16,7 @@ export function externalIdFor(mappings: Mapping[] | undefined | null): string | 
 export interface LocalMediaLinkInput {
   kind: string;
   title: string;
+  originalTitle?: string | null;
   posterUrl: string | null;
   externalMappings: Mapping[];
   episode?: {
@@ -41,7 +42,8 @@ export interface LocalMediaLink {
 export function localMediaLink(m: LocalMediaLinkInput): LocalMediaLink {
   if (m.kind === "MOVIE" || m.kind === "SERIES") {
     const ext = externalIdFor(m.externalMappings);
-    return { href: ext ? mediaHref(m.kind, ext) : null, title: m.title, subtitle: null, posterUrl: m.posterUrl, kind: m.kind };
+    const subtitle = m.originalTitle && m.originalTitle !== m.title ? m.originalTitle : null;
+    return { href: ext ? mediaHref(m.kind, ext) : null, title: m.title, subtitle, posterUrl: m.posterUrl, kind: m.kind };
   }
   if (m.kind === "SEASON" && m.season) {
     const ext = externalIdFor(m.season.series.mediaItem.externalMappings);

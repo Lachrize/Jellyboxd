@@ -5,14 +5,14 @@ import { CalendarDays, Heart, Settings } from "lucide-react";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getUserReviews } from "@/lib/services/reviews";
-import { countSeenFilms, getFavorites, getRecentSeen } from "@/lib/services/profile";
+import { countSeenFilms, getFavorites, getUserLibrary } from "@/lib/services/profile";
 import { listHref } from "@/lib/links";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Poster } from "@/components/ui/poster";
-import { Stars } from "@/components/ui/stars";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionTitle } from "@/components/media/detail-hero";
+import { MediaCard } from "@/components/media/media-card";
 import { ReviewCard } from "@/components/social/review-card";
 import { FriendButton, FriendRequestsList } from "@/components/social/friend-controls";
 import { getFriendCount, getFriendshipState, getIncomingRequests } from "@/lib/services/friends";
@@ -50,7 +50,7 @@ export default async function ProfilePage({ params }: Params) {
       db.seriesProgress.count({ where: { userId: profile.id } }),
       db.review.count({ where: { userId: profile.id } }),
       viewer ? getFriendshipState(viewer.id, profile.id) : Promise.resolve("none" as const),
-      getRecentSeen(profile.id, viewer?.id ?? null, 12),
+      getUserLibrary(profile.id, viewer?.id ?? null, 10),
       getFavorites(profile.id, 12),
       getUserReviews(profile.id, viewer?.id ?? null, 4),
       db.list.findMany({
@@ -108,21 +108,23 @@ export default async function ProfilePage({ params }: Params) {
       )}
 
       <section>
-        <SectionTitle action={isSelf ? <Link href="/journal" className="text-sm text-muted-foreground link-underline">Journal complet</Link> : null}>
-          Vu récemment
+        <SectionTitle action={<Link href={`/u/${profile.username}/mediatheque`} className="text-sm text-muted-foreground link-underline">Voir tout</Link>}>
+          Films & séries récents
         </SectionTitle>
         {recent.length === 0 ? (
-          <EmptyState title="Aucun visionnage" description="Notez ou journalisez une œuvre pour la voir apparaître ici." />
+          <EmptyState title="Aucune œuvre" description="Notez, commentez ou ajoutez une œuvre aux favoris pour la voir apparaître ici." />
         ) : (
-          <div className="grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-6">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 md:grid-cols-5">
             {recent.map((item) => (
-              <Link key={item.mediaItemId} href={item.link.href ?? "#"} className="group block">
-                <div className="transition-all duration-300 ease-spring group-hover:-translate-y-1">
-                  <Poster title={item.link.title} kind={item.link.kind} src={item.link.posterUrl} rounded="rounded-xl" />
-                </div>
-                <p className="mt-2 truncate text-sm font-medium text-foreground group-hover:text-accent">{item.link.title}</p>
-                {item.rating ? <Stars value={item.rating} size={11} className="mt-0.5" /> : null}
-              </Link>
+              <MediaCard
+                key={item.mediaItemId}
+                href={item.link.href ?? "#"}
+                title={item.link.title}
+                kind={item.link.kind}
+                posterUrl={item.link.posterUrl}
+                userRating={item.rating}
+                liked={item.liked}
+              />
             ))}
           </div>
         )}

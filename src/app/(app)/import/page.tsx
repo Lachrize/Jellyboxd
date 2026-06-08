@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Database, Server, Sparkles, Workflow } from "lucide-react";
+import { Database, Server, Sparkles, Star, Workflow } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { Card, CardBody } from "@/components/ui/card";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AddJellyfinForm, DeleteSourceButton } from "@/components/import/jellyfin-source";
+import { LetterboxdRatingsImportForm } from "@/components/import/letterboxd-ratings";
 import { formatDate } from "@/lib/dates";
 
 export const metadata: Metadata = { title: "Importer & synchroniser" };
@@ -49,6 +50,18 @@ export default async function ImportPage() {
           </div>
         ))}
       </div>
+
+      <section>
+        <div className="mb-3 flex items-center gap-2">
+          <Star className="h-5 w-5 text-accent" />
+          <h2 className="font-serif text-lg text-foreground">Importer mes notes Letterboxd</h2>
+        </div>
+        <Card>
+          <CardBody>
+            <LetterboxdRatingsImportForm />
+          </CardBody>
+        </Card>
+      </section>
 
       <section>
         <h2 className="mb-3 font-serif text-lg text-foreground">Vos serveurs</h2>

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 export interface MediaCardProps {
   href: string;
   title: string;
+  subtitle?: string | null;
   year?: number | null;
   kind?: string;
   posterUrl?: string | null;
@@ -23,6 +24,7 @@ const KIND_LABEL: Record<string, string> = { MOVIE: "Film", SERIES: "Série", SE
 export function MediaCard({
   href,
   title,
+  subtitle,
   year,
   kind = "MOVIE",
   posterUrl,
@@ -67,7 +69,7 @@ export function MediaCard({
             {title}
           </p>
           <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
-            <span>{year ?? KIND_LABEL[kind]}</span>
+            <span className="truncate">{subtitle ?? year ?? KIND_LABEL[kind]}</span>
             {userRating ? <Stars value={userRating} size={11} /> : null}
           </div>
         </div>
