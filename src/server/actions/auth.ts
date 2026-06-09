@@ -108,3 +108,46 @@ export async function updateProfileAction(_prev: AuthState, formData: FormData):
   revalidatePath(`/u/${user.username}`);
   return { success: true };
 }
+
+/**
+ * Set a Jellyboxd e-mail and/or password from Settings. No current password is
+ * required (the active session proves identity) — this lets Jellyfin-paired
+ * accounts, which have a random password, choose real credentials so they can
+ * log in normally without the plugin link.
+ */
+export async function updateCredentialsAction(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const user = await requireUser();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("password") || "");
+  const passwordConfirm = String(formData.get("passwordConfirm") || "");
+
+  const fieldErrors: Record<string, string> = {};
+  let newEmail: string | undefined;
+  let newHash: string | undefined;
+
+  if (email) {
+    if (!z.string().email().safeParse(email).success) {
+      fieldErrors.email = "Adresse e-mail invalide";
+    } else {
+      const taken = await db.user.findFirst({ where: { email, NOT: { id: user.id } }, select: { id: true } });
+      if (taken) fieldErrors.email = "Cet e-mail est déjà utilisé.";
+      else newEmail = email;
+    }
+  }
+
+  if (password || passwordConfirm) {
+    if (password.length < 8) fieldErrors.password = "Au moins 8 caractères";
+    else if (password !== passwordConfirm) fieldErrors.passwordConfirm = "Les mots de passe ne correspondent pas";
+    else newHash = await hashPassword(password);
+  }
+
+  if (Object.keys(fieldErrors).length) return { fieldErrors };
+  if (!newEmail && !newHash) return { error: "Renseignez un e-mail ou un mot de passe." };
+
+  await db.user.update({
+    where: { id: user.id },
+    data: { ...(newEmail ? { email: newEmail } : {}), ...(newHash ? { passwordHash: newHash } : {}) },
+  });
+  revalidatePath("/parametres");
+  return { success: true };
+}

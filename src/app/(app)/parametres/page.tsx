@@ -6,6 +6,7 @@ import { hasSyncToken } from "@/lib/jellyfin/sync-token";
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ProfileForm } from "@/components/settings/profile-form";
+import { CredentialsForm } from "@/components/settings/credentials-form";
 import { JellyfinConnect } from "@/components/settings/jellyfin-connect";
 
 export const metadata: Metadata = { title: "Paramètres" };
@@ -50,6 +51,11 @@ export default async function SettingsPage() {
               <span className="text-sm text-muted">Nom d'utilisateur</span>
               <span className="text-sm text-foreground">@{user.username}</span>
             </div>
+          </CardBody>
+        </Card>
+        <Card className="mt-4">
+          <CardBody>
+            <CredentialsForm username={user.username} email={user.email} />
           </CardBody>
         </Card>
       </section>
