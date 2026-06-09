@@ -32,6 +32,7 @@ model User {
   avatarUrl    String?
   isAdmin      Boolean  @default(false) // access to the /admin dashboard
   jellyfinUserId String? // this user's id on THEIR connected Jellyfin server
+  jellyfinServerId String? // the Jellyfin server id the account is linked to
   syncTokenHash  String? @unique // sha-256 of the personal token the plugin uses (inbound)
   defaultVisibility String @default("PUBLIC") // remembered default for new notes
   // Single special list created on signup (kind = WATCHLIST) is found by query.
@@ -58,8 +59,25 @@ model User {
 
   syncLinks SyncLink[]
   pendingSyncs PendingSync[]
+  claimCodes ClaimCode[]
 
   @@index([createdAt])
+}
+
+/// Single-use, short-lived code that logs a user into Jellyboxd from their
+/// Jellyfin plugin ("pair" / magic-link), so Jellyfin users never need a second
+/// password. Issued by POST /api/auth/jellyfin-link, consumed by GET /claim.
+model ClaimCode {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 /// Mutual friendship with an explicit request/accept flow.
