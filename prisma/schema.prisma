@@ -57,6 +57,7 @@ model User {
   friendshipsReceived Friendship[] @relation("FriendAddressee")
 
   syncLinks SyncLink[]
+  pendingSyncs PendingSync[]
 
   @@index([createdAt])
 }
@@ -150,6 +151,7 @@ model MediaItem {
   listItems        ListItem[]
   activities       Activity[]
   syncLinks        SyncLink[]
+  pendingSyncs     PendingSync[]
 
   @@index([kind])
   @@index([popularity])
@@ -497,4 +499,25 @@ model SyncLink {
 
   @@unique([userId, mediaItemId])
   @@index([jellyfinItemId])
+}
+
+/// Outbound queue (Jellyboxd -> Jellyfin). A user action enqueues the desired
+/// state here; the user's Jellyfin plugin pulls these, applies them locally and
+/// acks them. This keeps the reverse direction working even when the user's
+/// Jellyfin is only reachable on their LAN (the plugin has outbound access).
+model PendingSync {
+  id          String   @id @default(cuid())
+  userId      String
+  mediaItemId String
+  played      Boolean? // null = no change
+  rating      Int? // null = no change, 0 = clear, 1..10 = set
+  favorite    Boolean? // null = no change
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItem MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaItemId])
+  @@index([userId])
 }

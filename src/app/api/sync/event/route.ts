@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { db } from "@/lib/db";
 import { resolveUserBySyncToken } from "@/lib/jellyfin/sync-token";
 import { applyInboundEvent, type InboundSyncEvent } from "@/lib/jellyfin/inbound";
 
@@ -63,10 +64,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 400 });
   }
 
-  // Only sync events for the token owner's own Jellyfin user.
+  // Only sync events for the token owner's own Jellyfin user. The owner's
+  // jellyfinUserId is learned from the first event (no prior "connect" needed).
   const eventUser = parsed.data.user.jellyfinUserId;
   if (owner.jellyfinUserId && eventUser && owner.jellyfinUserId !== eventUser) {
     return NextResponse.json({ ok: true, status: "ignored", reason: "other_user" });
+  }
+  if (!owner.jellyfinUserId && eventUser) {
+    await db.user.update({ where: { id: owner.userId }, data: { jellyfinUserId: eventUser } }).catch(() => {});
   }
 
   const result = await applyInboundEvent(owner.userId, parsed.data as InboundSyncEvent);
