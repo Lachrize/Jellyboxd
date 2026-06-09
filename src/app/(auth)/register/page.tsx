@@ -7,9 +7,10 @@ export const metadata: Metadata = { title: "Créer un compte" };
 export default function RegisterPage() {
   return (
     <div className="animate-rise-in">
-      <h1 className="font-serif text-3xl text-foreground">Commencez votre carnet.</h1>
+      <h1 className="font-serif text-3xl text-foreground">Connectez Jellyboxd à Jellyfin.</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Notez, critiquez et suivez vos films et séries. Gratuit, pour toujours.
+        Créez votre compte, puis vous arriverez directement sur la connexion Jellyfin :
+        URL du serveur, clé API et utilisateur à synchroniser.
       </p>
       <div className="mt-8">
         <RegisterForm />

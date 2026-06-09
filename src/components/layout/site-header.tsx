@@ -27,7 +27,7 @@ export function SiteHeader({ user }: { user: SafeUser | null }) {
                 <Link href="/login">Connexion</Link>
               </Button>
               <Button size="sm" asChild>
-                <Link href="/register">Créer un compte</Link>
+                <Link href="/register">Connecter Jellyfin</Link>
               </Button>
             </div>
           )}

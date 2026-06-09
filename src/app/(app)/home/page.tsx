@@ -1,8 +1,9 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { BookMarked, Clapperboard, Compass, Film, Heart, Star, Users } from "lucide-react";
+import { BookMarked, Clapperboard, Compass, Film, Heart, KeyRound, Network, RefreshCw, Server, Star, Users } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
+import { getJellyfinConnectionPreview } from "@/lib/jellyfin/config";
 import { getFriendsFeed } from "@/lib/services/feed";
 import { getFriendCount } from "@/lib/services/friends";
 import { countSeenFilms, getFavorites } from "@/lib/services/profile";
@@ -15,6 +16,7 @@ import { Poster } from "@/components/ui/poster";
 import { MediaCard, MediaGrid } from "@/components/media/media-card";
 import { SectionTitle } from "@/components/media/detail-hero";
 import { FeedItem } from "@/components/social/feed-item";
+import { JellyfinConnect } from "@/components/settings/jellyfin-connect";
 
 export const metadata: Metadata = { title: "Accueil" };
 
@@ -30,6 +32,47 @@ function StatPill({ icon: Icon, value, label }: { icon: typeof Film; value: stri
 
 export default async function HomePage() {
   const user = await requireUser();
+  const jellyfin = await getJellyfinConnectionPreview(user.id);
+  const firstName = user.name?.split(" ")[0] ?? user.username;
+
+  if (!jellyfin?.hasApiKey) {
+    return (
+      <div className="mx-auto max-w-5xl space-y-8">
+        <section className="relative overflow-hidden rounded-3xl border border-border bg-surface p-6 sm:p-8 lg:p-10">
+          <div className="pointer-events-none absolute inset-0 bg-grain" />
+          <div className="relative grid gap-8 lg:grid-cols-[1fr_0.9fr] lg:items-center">
+            <div>
+              <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-accent/25 bg-accent/10 px-3 py-1 text-xs font-medium text-accent">
+                <Server className="h-3.5 w-3.5" /> Configuration Jellyfin
+              </p>
+              <h1 className="font-serif text-3xl text-foreground sm:text-5xl">
+                Bonjour {firstName}, connectez votre serveur Jellyfin.
+              </h1>
+              <p className="mt-4 max-w-2xl text-muted-foreground text-pretty sm:text-lg">
+                Jellyboxd fonctionne comme Jellyseerr ou Jellystat : vous renseignez l&apos;URL LAN de Jellyfin,
+                une clé API créée par l&apos;admin, puis Jellyboxd synchronise votre activité.
+              </p>
+              <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                {[
+                  { icon: Network, title: "Même réseau", body: "Utilisez l'adresse accessible depuis le conteneur Jellyboxd." },
+                  { icon: KeyRound, title: "Clé API", body: "Créez-la dans le tableau de bord Jellyfin." },
+                  { icon: RefreshCw, title: "Sync", body: "Récupérez vu, notes et favoris depuis Jellyfin." },
+                ].map((item) => (
+                  <div key={item.title} className="rounded-2xl border border-border/70 bg-surface-2/70 p-4">
+                    <item.icon className="mb-2 h-4 w-4 text-accent" />
+                    <h3 className="text-sm font-medium text-foreground">{item.title}</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">{item.body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <JellyfinConnect connection={jellyfin} />
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -66,8 +109,6 @@ export default async function HomePage() {
   const avgRating = ratings.length
     ? (ratings.reduce((sum, rating) => sum + rating.value, 0) / ratings.length / 2).toFixed(1)
     : "—";
-  const firstName = user.name?.split(" ")[0] ?? user.username;
-
   return (
     <div className="space-y-10">
       <section className="relative overflow-hidden rounded-3xl border border-border bg-surface p-6 sm:p-8">
