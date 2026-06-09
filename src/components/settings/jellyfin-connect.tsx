@@ -35,7 +35,13 @@ const STATUS: Record<string, { label: string; variant: "muted" | "success" | "da
   ERROR: { label: "Erreur", variant: "danger" },
 };
 
-export function JellyfinConnect({ connection }: { connection: JellyfinConnectionPreview | null }) {
+export function JellyfinConnect({
+  connection,
+  redirectOnConnect = false,
+}: {
+  connection: JellyfinConnectionPreview | null;
+  redirectOnConnect?: boolean;
+}) {
   const router = useRouter();
   const { toast } = useToast();
   const [baseUrl, setBaseUrl] = useState(connection?.baseUrl ?? "");
@@ -100,6 +106,10 @@ export function JellyfinConnect({ connection }: { connection: JellyfinConnection
       }
       toast({ title: "Jellyfin connecté", variant: "success" });
       setApiKey("");
+      if (redirectOnConnect) {
+        router.push("/home");
+        return;
+      }
       router.refresh();
     });
   }

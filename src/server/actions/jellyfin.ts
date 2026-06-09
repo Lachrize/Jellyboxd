@@ -1,12 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireUser } from "@/lib/auth/current-user";
+import { getCurrentUser, requireUser } from "@/lib/auth/current-user";
+import { createSession } from "@/lib/auth/session";
 import { JellyfinApiError, JellyfinClient, normalizeJellyfinUrl } from "@/lib/jellyfin/client";
 import { buildConfig, getJellyfinConnectionPreview } from "@/lib/jellyfin/config";
 import { syncFromJellyfin } from "@/lib/jellyfin/sync";
+import { createLocalUser, randomPasswordHash, uniqueEmail, uniqueUsername } from "@/lib/services/users";
 
 const connectSchema = z.object({
   baseUrl: z.string().trim().min(1, "URL requise"),
@@ -44,9 +47,15 @@ function jellyfinErrorMessage(error: unknown): string {
   return "Connexion impossible.";
 }
 
-async function resolveApiKey(userId: string, raw: string): Promise<string> {
+async function sessionMeta() {
+  const h = await headers();
+  return { userAgent: h.get("user-agent"), ip: h.get("x-forwarded-for") };
+}
+
+async function resolveApiKey(userId: string | null, raw: string): Promise<string> {
   const trimmed = raw.trim();
   if (trimmed) return trimmed;
+  if (!userId) return "";
   const existing = await db.importSource.findFirst({
     where: { userId, kind: "JELLYFIN" },
     select: { config: true },
@@ -63,8 +72,8 @@ async function resolveApiKey(userId: string, raw: string): Promise<string> {
 
 /** Probe Jellyfin and return the list of users (for the picker). */
 export async function testJellyfinConnectionAction(_prev: JellyfinFormState, formData: FormData): Promise<JellyfinFormState> {
-  const user = await requireUser();
-  const apiKey = await resolveApiKey(user.id, String(formData.get("apiKey") ?? ""));
+  const user = await getCurrentUser();
+  const apiKey = await resolveApiKey(user?.id ?? null, String(formData.get("apiKey") ?? ""));
   const parsed = testSchema.safeParse({
     baseUrl: formData.get("baseUrl"),
     apiKey,
@@ -91,6 +100,110 @@ export async function testJellyfinConnectionAction(_prev: JellyfinFormState, for
 
 /** Save Jellyfin URL + API key + linked user. */
 export async function connectJellyfinAction(_prev: JellyfinFormState, formData: FormData): Promise<JellyfinFormState> {
+  const currentUser = await getCurrentUser();
+  const existingForCurrentUser = currentUser
+    ? await db.importSource.findFirst({
+        where: { userId: currentUser.id, kind: "JELLYFIN" },
+        select: { id: true, config: true },
+      })
+    : null;
+  const apiKey = await resolveApiKey(currentUser?.id ?? null, String(formData.get("apiKey") ?? ""));
+
+  const parsed = connectSchema.safeParse({
+    baseUrl: formData.get("baseUrl"),
+    apiKey,
+    jellyfinUserId: formData.get("jellyfinUserId"),
+    name: formData.get("name") || undefined,
+  });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    parsed.error.issues.forEach((i) => (fieldErrors[String(i.path[0])] ??= i.message));
+    return { fieldErrors };
+  }
+
+  try {
+    const baseUrl = normalizeJellyfinUrl(parsed.data.baseUrl);
+    const client = new JellyfinClient(baseUrl, parsed.data.apiKey);
+    const [info, users] = await Promise.all([client.getSystemInfo(), client.getUsers()]);
+    const jellyfinUser = users.find((u) => u.Id === parsed.data.jellyfinUserId);
+    if (!jellyfinUser) return { error: "Utilisateur Jellyfin introuvable." };
+
+    let userId = currentUser?.id ?? null;
+    let existing = existingForCurrentUser;
+
+    if (!userId) {
+      const linkedUser = await db.user.findFirst({
+        where: { jellyfinServerId: info.Id, jellyfinUserId: jellyfinUser.Id },
+        select: { id: true },
+      });
+
+      if (linkedUser) {
+        userId = linkedUser.id;
+      } else {
+        const userCount = await db.user.count();
+        const username = await uniqueUsername(jellyfinUser.Name);
+        const user = await createLocalUser({
+          email: await uniqueEmail(username),
+          username,
+          name: jellyfinUser.Name,
+          passwordHash: await randomPasswordHash(),
+          jellyfinUserId: jellyfinUser.Id,
+        });
+        await db.user.update({
+          where: { id: user.id },
+          data: { jellyfinServerId: info.Id, isAdmin: userCount === 0 },
+        });
+        userId = user.id;
+      }
+
+      await createSession(userId, await sessionMeta());
+      existing = await db.importSource.findFirst({
+        where: { userId, kind: "JELLYFIN" },
+        select: { id: true, config: true },
+      });
+    }
+
+    if (!userId) return { error: "Impossible de créer la session Jellyboxd." };
+
+    const name = parsed.data.name?.trim() || info.ServerName || "Jellyfin";
+    const config = buildConfig({
+      apiKey: parsed.data.apiKey,
+      jellyfinUserId: jellyfinUser.Id,
+      jellyfinUserName: jellyfinUser.Name,
+      serverId: info.Id,
+    });
+
+    if (existing) {
+      await db.importSource.update({
+        where: { id: existing.id },
+        data: { name, baseUrl, config, status: "CONNECTED" },
+      });
+    } else {
+      await db.importSource.create({
+        data: { userId, kind: "JELLYFIN", name, baseUrl, config, status: "CONNECTED" },
+      });
+    }
+
+    await db.user.update({
+      where: { id: userId },
+      data: { jellyfinUserId: jellyfinUser.Id, jellyfinServerId: info.Id },
+    });
+
+    revalidatePath("/");
+    revalidatePath("/home");
+    revalidatePath("/parametres");
+    revalidatePath("/import");
+    return { success: true, serverName: info.ServerName };
+  } catch (error) {
+    return { error: jellyfinErrorMessage(error) };
+  }
+}
+
+/** Save Jellyfin URL + API key + linked user for authenticated settings updates. */
+export async function connectAuthenticatedJellyfinAction(
+  _prev: JellyfinFormState,
+  formData: FormData,
+): Promise<JellyfinFormState> {
   const user = await requireUser();
   const existing = await db.importSource.findFirst({
     where: { userId: user.id, kind: "JELLYFIN" },

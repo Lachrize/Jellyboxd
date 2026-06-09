@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, KeyRound, Network, PlugZap, RefreshCw, Server } from "lucide-react";
+import { KeyRound, Network, RefreshCw, Server } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { JellyfinConnect } from "@/components/settings/jellyfin-connect";
 
 export default async function LandingPage() {
   const user = await getCurrentUser();
@@ -13,7 +13,7 @@ export default async function LandingPage() {
     <div className="-mt-8">
       <section className="relative overflow-hidden py-16 sm:py-24">
         <div className="pointer-events-none absolute inset-0 bg-grain" />
-        <div className="relative grid gap-10 lg:grid-cols-[1fr_0.85fr] lg:items-center">
+        <div className="relative grid gap-10 lg:grid-cols-[0.9fr_1fr] lg:items-start">
           <div>
             <Badge variant="accent" className="mb-6">
               <Server className="h-3 w-3" /> Companion app pour Jellyfin
@@ -26,27 +26,7 @@ export default async function LandingPage() {
               renseignez l&apos;URL du serveur et une clé API, puis synchronisez vos films, séries,
               notes, vus et favoris.
             </p>
-            <div className="mt-9 flex flex-wrap items-center gap-3">
-              <Button size="lg" asChild>
-                <Link href="/register">
-                  Connecter mon serveur <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-              <Button size="lg" variant="secondary" asChild>
-                <Link href="/login">J&apos;ai déjà un compte</Link>
-              </Button>
-            </div>
-            <p className="mt-4 text-sm text-muted">
-              Après l&apos;inscription, vous arrivez directement sur l&apos;écran de connexion Jellyfin.
-            </p>
-          </div>
-
-          <div className="surface-card overflow-hidden p-5 sm:p-6">
-            <div className="mb-5 flex items-center gap-2">
-              <PlugZap className="h-5 w-5 text-accent" />
-              <h2 className="font-serif text-xl text-foreground">Configuration rapide</h2>
-            </div>
-            <div className="space-y-3">
+            <div className="mt-8 space-y-3">
               {[
                 {
                   icon: Network,
@@ -73,7 +53,15 @@ export default async function LandingPage() {
                 </div>
               ))}
             </div>
+            <p className="mt-5 text-sm text-muted">
+              Déjà configuré ?{" "}
+              <Link href="/login" className="font-medium text-accent link-underline">
+                Se connecter
+              </Link>
+            </p>
           </div>
+
+          <JellyfinConnect connection={null} redirectOnConnect />
         </div>
       </section>
     </div>
