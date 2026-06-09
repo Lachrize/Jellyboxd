@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Link2, RefreshCw, Server, Unplug } from "lucide-react";
+import { ArrowRight, Check, Link2, RefreshCw, Server, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/toast";
 import {
   connectJellyfinAction,
   disconnectJellyfinAction,
+  setupJellyfinServerAction,
   syncJellyfinAction,
   testJellyfinConnectionAction,
 } from "@/server/actions/jellyfin";
@@ -38,16 +39,18 @@ const STATUS: Record<string, { label: string; variant: "muted" | "success" | "da
 export function JellyfinConnect({
   connection,
   redirectOnConnect = false,
+  setupVariant = false,
 }: {
   connection: JellyfinConnectionPreview | null;
   redirectOnConnect?: boolean;
+  setupVariant?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const [baseUrl, setBaseUrl] = useState(connection?.baseUrl ?? "");
   const [apiKey, setApiKey] = useState("");
   const [name, setName] = useState(connection?.name ?? "");
-  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
+  const [users, setUsers] = useState<{ id: string; name: string; isAdmin: boolean }[]>([]);
   const [selectedUser, setSelectedUser] = useState(connection?.jellyfinUserId ?? "");
   const [serverName, setServerName] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -86,9 +89,35 @@ export function JellyfinConnect({
       if (result?.users) {
         setUsers(result.users);
         setServerName(result.serverName ?? null);
-        if (!selectedUser && result.users[0]) setSelectedUser(result.users[0].id);
+        // Prefer a Jellyfin admin as the owner account for the first setup.
+        const preferred = result.users.find((u) => u.isAdmin) ?? result.users[0];
+        if (preferred) setSelectedUser(preferred.id);
         toast({ title: "Connexion réussie", description: result.serverName ?? undefined, variant: "success" });
       }
+    });
+  }
+
+  function handleSetupServer() {
+    startConnect(async () => {
+      setFieldErrors({});
+      const result = await setupJellyfinServerAction(null, buildFormData());
+      if (result?.fieldErrors) {
+        setFieldErrors(result.fieldErrors);
+        return;
+      }
+      if (result?.error) {
+        toast({ title: result.error, variant: "error" });
+        return;
+      }
+      toast({
+        title: "Serveur Jellyfin configuré",
+        description: result?.importedUsers
+          ? `${result.importedUsers.total} utilisateur(s) prêt(s) à se connecter.`
+          : undefined,
+        variant: "success",
+      });
+      // No auto-login: each person signs in with their own Jellyfin account.
+      router.push("/login");
     });
   }
 
@@ -104,7 +133,13 @@ export function JellyfinConnect({
         toast({ title: result.error, variant: "error" });
         return;
       }
-      toast({ title: "Jellyfin connecté", variant: "success" });
+      toast({
+        title: "Jellyfin connecté",
+        description: result?.importedUsers
+          ? `${result.importedUsers.total} utilisateur(s) importé(s), dont ${result.importedUsers.admins} admin(s).`
+          : undefined,
+        variant: "success",
+      });
       setApiKey("");
       if (redirectOnConnect) {
         router.push("/home");
@@ -142,26 +177,40 @@ export function JellyfinConnect({
     });
   }
 
+  const testPassed = users.length > 0;
   const showUserPicker = users.length > 0 || Boolean(connection?.jellyfinUserId);
+  const cardClass = setupVariant
+    ? "space-y-5"
+    : "surface-card space-y-5 p-5";
+  const inputClass = setupVariant
+    ? "border-white/10 bg-white/[0.06] text-white placeholder:text-gray-500 focus:border-indigo-400 focus:ring-indigo-500/40"
+    : undefined;
+  const labelClass = setupVariant ? "text-gray-200" : undefined;
+  const indigoButton =
+    "bg-gradient-to-b from-indigo-500 to-indigo-600 text-white shadow-lg shadow-indigo-950/40 hover:from-indigo-400 hover:to-indigo-500";
 
   return (
-    <div className="surface-card space-y-5 p-5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Server className="h-4 w-4 text-accent" />
-          <h3 className="font-medium text-foreground">Connecter Jellyfin</h3>
+    <div className={cardClass}>
+      {!setupVariant && (
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Server className="h-4 w-4 text-accent" />
+            <h3 className="font-medium text-foreground">Connecter Jellyfin</h3>
+          </div>
+          {connection && (
+            <Badge variant={STATUS[connection.status]?.variant ?? "muted"}>
+              {STATUS[connection.status]?.label ?? connection.status}
+            </Badge>
+          )}
         </div>
-        {connection && (
-          <Badge variant={STATUS[connection.status]?.variant ?? "muted"}>
-            {STATUS[connection.status]?.label ?? connection.status}
-          </Badge>
-        )}
-      </div>
+      )}
 
-      <p className="text-sm text-muted-foreground text-pretty">
-        Comme Jellyseerr ou Jellystat : Jellyboxd doit être hébergé sur le <strong>même réseau</strong> que votre
-        serveur Jellyfin. Créez une clé API dans Jellyfin (Tableau de bord → Clés API) et renseignez-la ici.
-      </p>
+      {!setupVariant && (
+        <p className="text-sm text-muted-foreground text-pretty">
+          Comme Jellyseerr ou Jellystat : connectez Jellyboxd avec l&apos;URL locale de Jellyfin et une clé API.
+          Les utilisateurs Jellyfin seront importés automatiquement, et les admins Jellyfin deviendront admins Jellyboxd.
+        </p>
+      )}
 
       {isConnected && connection && (
         <div className="rounded-xl border border-border bg-surface-2 p-4 text-sm">
@@ -184,19 +233,21 @@ export function JellyfinConnect({
         </div>
       )}
 
-      <div className="space-y-4 border-t border-border pt-4">
-        <Field label="URL du serveur Jellyfin" htmlFor="jf-baseUrl" error={fieldErrors.baseUrl}>
+      <div className={setupVariant ? "space-y-4" : "space-y-4 border-t border-border pt-4"}>
+        <Field label="URL du serveur Jellyfin" htmlFor="jf-baseUrl" error={fieldErrors.baseUrl} labelClassName={labelClass}>
           <Input
             id="jf-baseUrl"
+            className={inputClass}
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
             placeholder="http://192.168.1.50:8096"
             required
           />
         </Field>
-        <Field label="Clé API Jellyfin" htmlFor="jf-apiKey" error={fieldErrors.apiKey}>
+        <Field label="Clé API Jellyfin" htmlFor="jf-apiKey" error={fieldErrors.apiKey} labelClassName={labelClass}>
           <Input
             id="jf-apiKey"
+            className={inputClass}
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
@@ -204,13 +255,44 @@ export function JellyfinConnect({
             required={!isConnected}
           />
         </Field>
-        <Button type="button" variant="secondary" size="sm" onClick={handleTest} disabled={testing}>
-          {testing ? <Spinner /> : "Tester la connexion"}
+        <Button
+          type="button"
+          variant={setupVariant ? "primary" : "secondary"}
+          size={setupVariant ? "md" : "sm"}
+          className={setupVariant ? `w-full ${testPassed ? "bg-white/5 text-gray-200 shadow-none hover:bg-white/10" : indigoButton}` : undefined}
+          onClick={handleTest}
+          disabled={testing}
+        >
+          {testing ? <Spinner /> : testPassed ? "Tester à nouveau" : "Tester la connexion"}
         </Button>
-        {serverName && <p className="text-xs text-muted">Serveur détecté : {serverName}</p>}
+        {serverName && (
+          <p className={setupVariant ? "flex items-center gap-1.5 text-sm font-medium text-emerald-400" : "text-xs text-muted"}>
+            <Check className="h-4 w-4" /> Serveur détecté : {serverName}
+          </p>
+        )}
       </div>
 
-      {showUserPicker && (
+      {/* Setup flow: once the test passes, the owner account (Jellyfin admin) is
+          chosen automatically — just move on with a single "Suivant" button. */}
+      {setupVariant && testPassed && (
+        <div className="space-y-3 border-t border-white/10 pt-5">
+          <Button
+            type="button"
+            size="lg"
+            className={`w-full ${indigoButton}`}
+            onClick={handleSetupServer}
+            disabled={connecting}
+          >
+            {connecting ? <Spinner /> : <>Suivant <ArrowRight className="h-4 w-4" /></>}
+          </Button>
+          <p className="text-center text-xs text-gray-400">
+            Les utilisateurs Jellyfin seront importés. Chacun se connectera ensuite avec son compte.
+          </p>
+        </div>
+      )}
+
+      {/* Settings flow keeps the explicit user picker + custom name. */}
+      {!setupVariant && showUserPicker && (
         <div className="space-y-4 border-t border-border pt-4">
           <Field label="Utilisateur Jellyfin" htmlFor="jf-user" error={fieldErrors.jellyfinUserId}>
             <select
@@ -222,7 +304,7 @@ export function JellyfinConnect({
             >
               <option value="">Choisir un utilisateur…</option>
               {users.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
+                <option key={u.id} value={u.id}>{u.name}{u.isAdmin ? " (admin)" : ""}</option>
               ))}
               {connection?.jellyfinUserId && !users.some((u) => u.id === connection.jellyfinUserId) && (
                 <option value={connection.jellyfinUserId}>{connection.jellyfinUserName ?? connection.jellyfinUserId}</option>
@@ -230,9 +312,18 @@ export function JellyfinConnect({
             </select>
           </Field>
           <Field label="Nom (optionnel)" htmlFor="jf-name">
-            <Input id="jf-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jellyfin maison" />
+            <Input
+              id="jf-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Jellyfin maison"
+            />
           </Field>
-          <Button type="button" onClick={handleConnect} disabled={connecting || !selectedUser}>
+          <Button
+            type="button"
+            onClick={handleConnect}
+            disabled={connecting || !selectedUser}
+          >
             {connecting ? <Spinner /> : <><Link2 className="h-4 w-4" /> {isConnected ? "Mettre à jour" : "Connecter"}</>}
           </Button>
         </div>

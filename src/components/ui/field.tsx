@@ -16,6 +16,7 @@ export function Field({
   hint,
   children,
   className,
+  labelClassName,
 }: {
   label?: string;
   htmlFor?: string;
@@ -23,10 +24,15 @@ export function Field({
   hint?: string;
   children: React.ReactNode;
   className?: string;
+  labelClassName?: string;
 }) {
   return (
     <div className={cn("space-y-1", className)}>
-      {label && <Label htmlFor={htmlFor}>{label}</Label>}
+      {label && (
+        <Label htmlFor={htmlFor} className={labelClassName}>
+          {label}
+        </Label>
+      )}
       {children}
       {error ? (
         <p className="text-xs text-danger">{error}</p>

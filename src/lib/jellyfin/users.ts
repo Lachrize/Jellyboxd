@@ -20,6 +20,14 @@ export function isJellyfinAdmin(user: JellyfinUser): boolean {
   return Boolean(user.Policy?.IsAdministrator);
 }
 
+function jellyfinAvatarUrl(user: JellyfinUser): string | null {
+  if (!user.PrimaryImageTag && !user.HasPrimaryImage) return null;
+  const params = new URLSearchParams();
+  if (user.PrimaryImageTag) params.set("tag", user.PrimaryImageTag);
+  const query = params.toString();
+  return `/api/jellyfin/avatar/${encodeURIComponent(user.Id)}${query ? `?${query}` : ""}`;
+}
+
 export async function provisionJellyfinUser(
   jellyfinUser: JellyfinUser,
   context: JellyfinProvisionContext,
@@ -50,6 +58,7 @@ export async function provisionJellyfinUser(
     where: { id: userId },
     data: {
       name: jellyfinUser.Name,
+      avatarUrl: jellyfinAvatarUrl(jellyfinUser),
       jellyfinUserId: jellyfinUser.Id,
       jellyfinServerId: context.serverId,
       isAdmin,

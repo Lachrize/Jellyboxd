@@ -7,6 +7,8 @@ export interface JellyfinSystemInfo {
 export interface JellyfinUser {
   Id: string;
   Name: string;
+  PrimaryImageTag?: string;
+  HasPrimaryImage?: boolean;
   Policy?: {
     IsAdministrator?: boolean;
     IsDisabled?: boolean;

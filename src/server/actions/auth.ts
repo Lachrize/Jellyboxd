@@ -7,9 +7,10 @@ import { db } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession, destroySession } from "@/lib/auth/session";
 import { requireUser } from "@/lib/auth/current-user";
-import { authenticateJellyfinUser, JellyfinApiError } from "@/lib/jellyfin/client";
-import { buildConfig, getPrimaryJellyfinServer } from "@/lib/jellyfin/config";
-import { createLocalUser, randomPasswordHash, uniqueEmail, uniqueUsername } from "@/lib/services/users";
+import { authenticateJellyfinUser, JellyfinApiError, JellyfinClient } from "@/lib/jellyfin/client";
+import { getPrimaryJellyfinServer } from "@/lib/jellyfin/config";
+import { provisionJellyfinUser } from "@/lib/jellyfin/users";
+import { createLocalUser } from "@/lib/services/users";
 import { loginSchema, profileSchema, registerSchema } from "@/lib/validation/auth";
 import { z } from "zod";
 
@@ -103,43 +104,17 @@ async function loginWithJellyfin(identifier: string, password: string): Promise<
     throw error;
   }
 
-  const existing = await db.user.findFirst({
-    where: { jellyfinServerId: server.serverId, jellyfinUserId: auth.User.Id },
-    select: { id: true },
-  });
-  if (existing) return existing.id;
+  const fullUser = auth.User.Policy
+    ? auth.User
+    : (await new JellyfinClient(server.baseUrl, server.apiKey).getUsers()).find((user) => user.Id === auth.User.Id) ?? auth.User;
 
-  const username = await uniqueUsername(auth.User.Name);
-  const user = await createLocalUser({
-    email: await uniqueEmail(username),
-    username,
-    name: auth.User.Name,
-    passwordHash: await randomPasswordHash(),
-    jellyfinUserId: auth.User.Id,
+  const provisioned = await provisionJellyfinUser(fullUser, {
+    baseUrl: server.baseUrl,
+    apiKey: server.apiKey,
+    serverId: server.serverId,
+    serverName: server.name,
   });
-
-  await db.user.update({
-    where: { id: user.id },
-    data: { jellyfinServerId: server.serverId },
-  });
-
-  await db.importSource.create({
-    data: {
-      userId: user.id,
-      kind: "JELLYFIN",
-      name: server.name,
-      baseUrl: server.baseUrl,
-      status: "CONNECTED",
-      config: buildConfig({
-        apiKey: server.apiKey,
-        jellyfinUserId: auth.User.Id,
-        jellyfinUserName: auth.User.Name,
-        serverId: server.serverId,
-      }),
-    },
-  });
-
-  return user.id;
+  return provisioned.userId;
 }
 
 export async function logoutAction() {

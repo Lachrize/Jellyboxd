@@ -9,7 +9,7 @@ import { createSession } from "@/lib/auth/session";
 import { JellyfinApiError, JellyfinClient, normalizeJellyfinUrl } from "@/lib/jellyfin/client";
 import { buildConfig, getJellyfinConnectionPreview } from "@/lib/jellyfin/config";
 import { syncFromJellyfin } from "@/lib/jellyfin/sync";
-import { createLocalUser, randomPasswordHash, uniqueEmail, uniqueUsername } from "@/lib/services/users";
+import { provisionJellyfinUser, provisionJellyfinUsers } from "@/lib/jellyfin/users";
 
 const connectSchema = z.object({
   baseUrl: z.string().trim().min(1, "URL requise"),
@@ -23,12 +23,15 @@ const testSchema = z.object({
   apiKey: z.string().trim().min(1, "Clé API requise"),
 });
 
+const setupSchema = testSchema;
+
 export type JellyfinFormState = {
   error?: string;
   fieldErrors?: Record<string, string>;
   success?: boolean;
-  users?: { id: string; name: string }[];
+  users?: { id: string; name: string; isAdmin: boolean }[];
   serverName?: string;
+  importedUsers?: { total: number; created: number; admins: number };
   syncResult?: { processed: number; applied: number; skipped: number; unmatched: number };
 } | null;
 
@@ -91,8 +94,45 @@ export async function testJellyfinConnectionAction(_prev: JellyfinFormState, for
     return {
       success: true,
       serverName: info.ServerName,
-      users: users.map((u) => ({ id: u.Id, name: u.Name })),
+      users: users
+        .filter((u) => !u.Policy?.IsDisabled)
+        .map((u) => ({ id: u.Id, name: u.Name, isAdmin: Boolean(u.Policy?.IsAdministrator) })),
     };
+  } catch (error) {
+    return { error: jellyfinErrorMessage(error) };
+  }
+}
+
+/**
+ * First-run setup: register the Jellyfin server and import every user, WITHOUT
+ * logging anyone in. Each person then signs in with their own Jellyfin account.
+ */
+export async function setupJellyfinServerAction(_prev: JellyfinFormState, formData: FormData): Promise<JellyfinFormState> {
+  const parsed = setupSchema.safeParse({
+    baseUrl: formData.get("baseUrl"),
+    apiKey: formData.get("apiKey"),
+  });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    parsed.error.issues.forEach((i) => (fieldErrors[String(i.path[0])] ??= i.message));
+    return { fieldErrors };
+  }
+
+  try {
+    const baseUrl = normalizeJellyfinUrl(parsed.data.baseUrl);
+    const client = new JellyfinClient(baseUrl, parsed.data.apiKey);
+    const [info, users] = await Promise.all([client.getSystemInfo(), client.getUsers()]);
+    const context = {
+      baseUrl,
+      apiKey: parsed.data.apiKey,
+      serverId: info.Id,
+      serverName: info.ServerName || "Jellyfin",
+    };
+    const importedUsers = await provisionJellyfinUsers(users, context);
+
+    revalidatePath("/");
+    revalidatePath("/login");
+    return { success: true, serverName: info.ServerName, importedUsers };
   } catch (error) {
     return { error: jellyfinErrorMessage(error) };
   }
@@ -127,35 +167,15 @@ export async function connectJellyfinAction(_prev: JellyfinFormState, formData: 
     const [info, users] = await Promise.all([client.getSystemInfo(), client.getUsers()]);
     const jellyfinUser = users.find((u) => u.Id === parsed.data.jellyfinUserId);
     if (!jellyfinUser) return { error: "Utilisateur Jellyfin introuvable." };
+    const name = parsed.data.name?.trim() || info.ServerName || "Jellyfin";
 
     let userId = currentUser?.id ?? null;
     let existing = existingForCurrentUser;
+    const context = { baseUrl, apiKey: parsed.data.apiKey, serverId: info.Id, serverName: name };
 
     if (!userId) {
-      const linkedUser = await db.user.findFirst({
-        where: { jellyfinServerId: info.Id, jellyfinUserId: jellyfinUser.Id },
-        select: { id: true },
-      });
-
-      if (linkedUser) {
-        userId = linkedUser.id;
-      } else {
-        const userCount = await db.user.count();
-        const username = await uniqueUsername(jellyfinUser.Name);
-        const user = await createLocalUser({
-          email: await uniqueEmail(username),
-          username,
-          name: jellyfinUser.Name,
-          passwordHash: await randomPasswordHash(),
-          jellyfinUserId: jellyfinUser.Id,
-        });
-        await db.user.update({
-          where: { id: user.id },
-          data: { jellyfinServerId: info.Id, isAdmin: userCount === 0 },
-        });
-        userId = user.id;
-      }
-
+      const provisioned = await provisionJellyfinUser(jellyfinUser, context);
+      userId = provisioned.userId;
       await createSession(userId, await sessionMeta());
       existing = await db.importSource.findFirst({
         where: { userId, kind: "JELLYFIN" },
@@ -165,7 +185,7 @@ export async function connectJellyfinAction(_prev: JellyfinFormState, formData: 
 
     if (!userId) return { error: "Impossible de créer la session Jellyboxd." };
 
-    const name = parsed.data.name?.trim() || info.ServerName || "Jellyfin";
+    const importedUsers = await provisionJellyfinUsers(users, context);
     const config = buildConfig({
       apiKey: parsed.data.apiKey,
       jellyfinUserId: jellyfinUser.Id,
@@ -193,7 +213,7 @@ export async function connectJellyfinAction(_prev: JellyfinFormState, formData: 
     revalidatePath("/home");
     revalidatePath("/parametres");
     revalidatePath("/import");
-    return { success: true, serverName: info.ServerName };
+    return { success: true, serverName: info.ServerName, importedUsers };
   } catch (error) {
     return { error: jellyfinErrorMessage(error) };
   }
@@ -231,6 +251,8 @@ export async function connectAuthenticatedJellyfinAction(
     if (!jellyfinUser) return { error: "Utilisateur Jellyfin introuvable." };
 
     const name = parsed.data.name?.trim() || info.ServerName || "Jellyfin";
+    const context = { baseUrl, apiKey: parsed.data.apiKey, serverId: info.Id, serverName: name };
+    const importedUsers = await provisionJellyfinUsers(users, context);
     const config = buildConfig({
       apiKey: parsed.data.apiKey,
       jellyfinUserId: jellyfinUser.Id,
@@ -256,7 +278,7 @@ export async function connectAuthenticatedJellyfinAction(
 
     revalidatePath("/parametres");
     revalidatePath("/import");
-    return { success: true, serverName: info.ServerName };
+    return { success: true, serverName: info.ServerName, importedUsers };
   } catch (error) {
     return { error: jellyfinErrorMessage(error) };
   }
