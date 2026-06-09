@@ -9,6 +9,17 @@ import { applyInboundEvent, type InboundSyncEvent } from "@/lib/jellyfin/inbound
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** CORS so the plugin's in-browser "Test connection" button can probe GET. */
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+} as const;
+
+export function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 const providerIdsSchema = z
   .object({
     Tmdb: z.string().nullable().optional(),
@@ -92,7 +103,7 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const owner = await resolveUserBySyncToken(request.headers.get("authorization"));
   if (!owner) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401, headers: CORS_HEADERS });
   }
-  return NextResponse.json({ ok: true, service: "jellyboxd-sync", version: 2 });
+  return NextResponse.json({ ok: true, service: "jellyboxd-sync", version: 2 }, { headers: CORS_HEADERS });
 }
