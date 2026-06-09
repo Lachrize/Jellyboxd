@@ -7,6 +7,10 @@ export interface JellyfinSystemInfo {
 export interface JellyfinUser {
   Id: string;
   Name: string;
+  Policy?: {
+    IsAdministrator?: boolean;
+    IsDisabled?: boolean;
+  };
 }
 
 export interface JellyfinAuthResponse {

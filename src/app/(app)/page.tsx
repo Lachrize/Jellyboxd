@@ -1,13 +1,43 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { KeyRound, Network, RefreshCw, Server } from "lucide-react";
+import { KeyRound, LogIn, Network, RefreshCw, Server } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { getPrimaryJellyfinServer } from "@/lib/jellyfin/config";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { JellyfinConnect } from "@/components/settings/jellyfin-connect";
 
 export default async function LandingPage() {
   const user = await getCurrentUser();
   if (user) redirect("/home");
+  const jellyfinServer = await getPrimaryJellyfinServer();
+
+  if (jellyfinServer) {
+    return (
+      <div className="-mt-8">
+        <section className="relative flex min-h-[70vh] items-center justify-center overflow-hidden py-16 sm:py-24">
+          <div className="pointer-events-none absolute inset-0 bg-grain" />
+          <div className="relative mx-auto max-w-xl text-center">
+            <Badge variant="accent" className="mb-6">
+              <Server className="h-3 w-3" /> Serveur Jellyfin connecté
+            </Badge>
+            <h1 className="font-serif text-display text-foreground">
+              Connectez-vous avec votre compte Jellyfin.
+            </h1>
+            <p className="mx-auto mt-5 max-w-md text-muted-foreground text-pretty">
+              Jellyboxd est relié à <span className="text-foreground">{jellyfinServer.name}</span>.
+              Chaque utilisateur se connecte avec ses identifiants Jellyfin et retrouve son propre espace.
+            </p>
+            <Button size="lg" className="mt-8" asChild>
+              <Link href="/login">
+                <LogIn className="h-4 w-4" /> Se connecter
+              </Link>
+            </Button>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="-mt-8">

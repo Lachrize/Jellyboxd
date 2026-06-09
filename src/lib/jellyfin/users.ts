@@ -1,0 +1,112 @@
+import { db } from "@/lib/db";
+import { createLocalUser, randomPasswordHash, uniqueEmail, uniqueUsername } from "@/lib/services/users";
+import { buildConfig } from "./config";
+import type { JellyfinUser } from "./client";
+
+export interface JellyfinProvisionContext {
+  baseUrl: string;
+  apiKey: string;
+  serverId: string;
+  serverName: string;
+}
+
+export interface ProvisionedJellyfinUser {
+  userId: string;
+  created: boolean;
+  isAdmin: boolean;
+}
+
+export function isJellyfinAdmin(user: JellyfinUser): boolean {
+  return Boolean(user.Policy?.IsAdministrator);
+}
+
+export async function provisionJellyfinUser(
+  jellyfinUser: JellyfinUser,
+  context: JellyfinProvisionContext,
+): Promise<ProvisionedJellyfinUser> {
+  const isAdmin = isJellyfinAdmin(jellyfinUser);
+  const existing = await db.user.findFirst({
+    where: { jellyfinServerId: context.serverId, jellyfinUserId: jellyfinUser.Id },
+    select: { id: true },
+  });
+
+  let userId = existing?.id ?? null;
+  let created = false;
+
+  if (!userId) {
+    const username = await uniqueUsername(jellyfinUser.Name);
+    const user = await createLocalUser({
+      email: await uniqueEmail(username),
+      username,
+      name: jellyfinUser.Name,
+      passwordHash: await randomPasswordHash(),
+      jellyfinUserId: jellyfinUser.Id,
+    });
+    userId = user.id;
+    created = true;
+  }
+
+  await db.user.update({
+    where: { id: userId },
+    data: {
+      name: jellyfinUser.Name,
+      jellyfinUserId: jellyfinUser.Id,
+      jellyfinServerId: context.serverId,
+      isAdmin,
+    },
+  });
+
+  const config = buildConfig({
+    apiKey: context.apiKey,
+    jellyfinUserId: jellyfinUser.Id,
+    jellyfinUserName: jellyfinUser.Name,
+    serverId: context.serverId,
+  });
+
+  const source = await db.importSource.findFirst({
+    where: { userId, kind: "JELLYFIN" },
+    select: { id: true },
+  });
+
+  if (source) {
+    await db.importSource.update({
+      where: { id: source.id },
+      data: {
+        name: context.serverName,
+        baseUrl: context.baseUrl,
+        status: "CONNECTED",
+        config,
+      },
+    });
+  } else {
+    await db.importSource.create({
+      data: {
+        userId,
+        kind: "JELLYFIN",
+        name: context.serverName,
+        baseUrl: context.baseUrl,
+        status: "CONNECTED",
+        config,
+      },
+    });
+  }
+
+  return { userId, created, isAdmin };
+}
+
+export async function provisionJellyfinUsers(
+  users: JellyfinUser[],
+  context: JellyfinProvisionContext,
+): Promise<{ total: number; created: number; admins: number }> {
+  let created = 0;
+  let admins = 0;
+
+  for (const user of users) {
+    if (user.Policy?.IsDisabled) continue;
+    const result = await provisionJellyfinUser(user, context);
+    if (result.created) created += 1;
+    if (result.isAdmin) admins += 1;
+  }
+
+  return { total: users.filter((user) => !user.Policy?.IsDisabled).length, created, admins };
+}
