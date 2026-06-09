@@ -6,9 +6,8 @@ import type { MediaKind } from "@/lib/constants";
 import { resolveJellyfinItem, type JellyfinProviderIds } from "./match";
 
 /**
- * One change pushed by the Jellyfin plugin. `state` is the *full* current
- * Jellyfin user-data snapshot for the item (not a diff), which makes the inbound
- * apply idempotent and order-independent.
+ * One Jellyfin user-data snapshot. `state` is the *full* current value for the
+ * item (not a diff), which makes the inbound apply idempotent and order-independent.
  */
 export interface InboundSyncEvent {
   user: { name?: string | null; jellyfinUserId?: string | null };
@@ -67,7 +66,7 @@ function decide<T>(incoming: T, current: T, incomingAt: Date, lastAt: Date | nul
 
 /**
  * Applies a Jellyfin user-data change to Jellyboxd. Shared by the realtime
- * `/api/sync/event` route and the initial backfill. Writes the underlying state
+ * the Jellyfin pull sync and realtime pushes. Writes the underlying state
  * (SeenMedia / Rating / Like) and updates the SyncLink snapshot used for echo
  * suppression and last-write-wins.
  *

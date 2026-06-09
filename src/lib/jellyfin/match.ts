@@ -60,7 +60,7 @@ export async function resolveJellyfinItem(input: {
     if (!mediaItemId && ids.Tmdb) {
       mediaItemId = await resolveMediaRef({ provider: "TMDB", externalId: String(ids.Tmdb), kind });
     }
-  } else if (kind === "SEASON" || kind === "EPISODE") {
+  } else   if (kind === "SEASON" || kind === "EPISODE") {
     const seriesTmdb = input.seriesProviderIds?.Tmdb;
     const season = input.seasonNumber;
     if (!seriesTmdb || season == null) return null;
@@ -72,6 +72,14 @@ export async function resolveJellyfinItem(input: {
           : episodeExternalId(String(seriesTmdb), season, input.episodeNumber);
     if (!externalId) return null;
     mediaItemId = await resolveMediaRef({ provider: "TMDB", externalId, kind });
+  }
+
+  if (mediaItemId) {
+    await db.externalMapping.upsert({
+      where: { provider_externalId: { provider: "JELLYFIN", externalId: input.jellyfinItemId } },
+      update: { mediaItemId },
+      create: { mediaItemId, provider: "JELLYFIN", externalId: input.jellyfinItemId },
+    });
   }
 
   return mediaItemId;

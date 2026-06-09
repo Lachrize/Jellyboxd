@@ -1,84 +1,232 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, KeyRound, RefreshCw } from "lucide-react";
+import { Link2, RefreshCw, Server, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
-import { regenerateSyncTokenAction } from "@/server/actions/jellyfin";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/ui/toast";
+import {
+  connectJellyfinAction,
+  disconnectJellyfinAction,
+  syncJellyfinAction,
+  testJellyfinConnectionAction,
+} from "@/server/actions/jellyfin";
+import { formatDate } from "@/lib/dates";
 
-const PLUGIN_MANIFEST_URL = "https://github.com/Lachrize/jellyfin-plugin-jellyboxd/raw/main/manifest.json";
-
-function CopyField({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div>
-      <p className="mb-1 text-xs text-muted">{label}</p>
-      <div className="flex items-center gap-2">
-        <code className="flex-1 truncate rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs text-foreground">{value}</code>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            navigator.clipboard?.writeText(value);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          }}
-        >
-          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-        </Button>
-      </div>
-    </div>
-  );
+export interface JellyfinConnectionPreview {
+  id: string;
+  name: string;
+  baseUrl: string | null;
+  status: string;
+  lastSyncedAt: Date | null;
+  jellyfinUserId: string | null;
+  jellyfinUserName: string | null;
+  hasApiKey: boolean;
 }
 
-export function JellyfinConnect({ hasToken, appUrl }: { hasToken: boolean; appUrl: string }) {
-  const router = useRouter();
-  const [generating, startGenerate] = useTransition();
-  const [token, setToken] = useState<string | null>(null);
+const STATUS: Record<string, { label: string; variant: "muted" | "success" | "danger" }> = {
+  DISCONNECTED: { label: "Non connecté", variant: "muted" },
+  CONNECTED: { label: "Connecté", variant: "success" },
+  SYNCING: { label: "Synchronisation…", variant: "muted" },
+  ERROR: { label: "Erreur", variant: "danger" },
+};
 
-  function generate() {
-    startGenerate(async () => {
-      const r = await regenerateSyncTokenAction();
-      setToken(r.token);
+export function JellyfinConnect({ connection }: { connection: JellyfinConnectionPreview | null }) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [baseUrl, setBaseUrl] = useState(connection?.baseUrl ?? "");
+  const [apiKey, setApiKey] = useState("");
+  const [name, setName] = useState(connection?.name ?? "");
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
+  const [selectedUser, setSelectedUser] = useState(connection?.jellyfinUserId ?? "");
+  const [serverName, setServerName] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [testing, startTest] = useTransition();
+  const [connecting, startConnect] = useTransition();
+  const [disconnecting, startDisconnect] = useTransition();
+  const [syncing, startSync] = useTransition();
+
+  const isConnected = connection?.hasApiKey && connection.status === "CONNECTED";
+
+  useEffect(() => {
+    if (connection?.jellyfinUserId) setSelectedUser(connection.jellyfinUserId);
+  }, [connection?.jellyfinUserId]);
+
+  function buildFormData() {
+    const fd = new FormData();
+    fd.set("baseUrl", baseUrl);
+    fd.set("apiKey", apiKey);
+    fd.set("jellyfinUserId", selectedUser);
+    fd.set("name", name);
+    return fd;
+  }
+
+  function handleTest() {
+    startTest(async () => {
+      setFieldErrors({});
+      const result = await testJellyfinConnectionAction(null, buildFormData());
+      if (result?.fieldErrors) {
+        setFieldErrors(result.fieldErrors);
+        return;
+      }
+      if (result?.error) {
+        toast({ title: result.error, variant: "error" });
+        return;
+      }
+      if (result?.users) {
+        setUsers(result.users);
+        setServerName(result.serverName ?? null);
+        if (!selectedUser && result.users[0]) setSelectedUser(result.users[0].id);
+        toast({ title: "Connexion réussie", description: result.serverName ?? undefined, variant: "success" });
+      }
+    });
+  }
+
+  function handleConnect() {
+    startConnect(async () => {
+      setFieldErrors({});
+      const result = await connectJellyfinAction(null, buildFormData());
+      if (result?.fieldErrors) {
+        setFieldErrors(result.fieldErrors);
+        return;
+      }
+      if (result?.error) {
+        toast({ title: result.error, variant: "error" });
+        return;
+      }
+      toast({ title: "Jellyfin connecté", variant: "success" });
+      setApiKey("");
       router.refresh();
     });
   }
 
+  function handleSync() {
+    startSync(async () => {
+      const result = await syncJellyfinAction();
+      if (result?.error) {
+        toast({ title: result.error, variant: "error" });
+        return;
+      }
+      if (result?.syncResult) {
+        toast({
+          title: "Synchronisation terminée",
+          description: `${result.syncResult.applied} élément(s) mis à jour sur ${result.syncResult.processed} analysé(s).`,
+          variant: "success",
+        });
+        router.refresh();
+      }
+    });
+  }
+
+  function handleDisconnect() {
+    startDisconnect(async () => {
+      await disconnectJellyfinAction();
+      toast({ title: "Jellyfin déconnecté", variant: "success" });
+      setUsers([]);
+      setApiKey("");
+      router.refresh();
+    });
+  }
+
+  const showUserPicker = users.length > 0 || Boolean(connection?.jellyfinUserId);
+
   return (
     <div className="surface-card space-y-5 p-5">
-      <div className="flex items-center gap-2">
-        <KeyRound className="h-4 w-4 text-accent" />
-        <h3 className="font-medium text-foreground">Connecter ton serveur Jellyfin</h3>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Server className="h-4 w-4 text-accent" />
+          <h3 className="font-medium text-foreground">Connecter Jellyfin</h3>
+        </div>
+        {connection && (
+          <Badge variant={STATUS[connection.status]?.variant ?? "muted"}>
+            {STATUS[connection.status]?.label ?? connection.status}
+          </Badge>
+        )}
       </div>
 
-      <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground marker:text-muted">
-        <li>Dans Jellyfin : <strong>Tableau de bord → Extensions → Dépôts → +</strong>, colle l'URL du dépôt ci-dessous, puis installe <strong>Jellyboxd Sync</strong> depuis le catalogue et redémarre.</li>
-        <li>Ouvre la config du plugin et renseigne : <strong>URL Jellyboxd</strong>, ton <strong>token</strong> (ci-dessous) et ton <strong>identifiant Jellyfin</strong>.</li>
-      </ol>
+      <p className="text-sm text-muted-foreground text-pretty">
+        Comme Jellyseerr ou Jellystat : Jellyboxd doit être hébergé sur le <strong>même réseau</strong> que votre
+        serveur Jellyfin. Créez une clé API dans Jellyfin (Tableau de bord → Clés API) et renseignez-la ici.
+      </p>
 
-      <CopyField label="URL du dépôt du plugin (à ajouter dans Jellyfin)" value={PLUGIN_MANIFEST_URL} />
-      <CopyField label="URL Jellyboxd (à coller dans le plugin)" value={appUrl} />
-
-      {token ? (
-        <CopyField label="Ton token de synchro (copie-le maintenant, il ne sera plus affiché)" value={token} />
-      ) : (
-        <p className="text-xs text-muted">
-          {hasToken
-            ? "Un token a déjà été généré. Régénère-le si tu l'as perdu (l'ancien sera invalidé)."
-            : "Génère ton token personnel pour relier le plugin à ton compte."}
-        </p>
+      {isConnected && connection && (
+        <div className="rounded-xl border border-border bg-surface-2 p-4 text-sm">
+          <p className="font-medium text-foreground">{connection.name}</p>
+          <p className="mt-1 text-muted-foreground">
+            {connection.baseUrl}
+            {connection.jellyfinUserName ? ` · ${connection.jellyfinUserName}` : ""}
+          </p>
+          {connection.lastSyncedAt && (
+            <p className="mt-1 text-xs text-muted">Dernière synchro : {formatDate(connection.lastSyncedAt)}</p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" onClick={handleSync} disabled={syncing}>
+              {syncing ? <Spinner /> : <><RefreshCw className="h-4 w-4" /> Synchroniser</>}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
+              {disconnecting ? <Spinner /> : <><Unplug className="h-4 w-4" /> Déconnecter</>}
+            </Button>
+          </div>
+        </div>
       )}
 
-      <Button variant="secondary" size="sm" onClick={generate} disabled={generating}>
-        {generating ? <Spinner /> : <><RefreshCw className="h-4 w-4" /> {hasToken || token ? "Régénérer le token" : "Générer mon token"}</>}
-      </Button>
+      <div className="space-y-4 border-t border-border pt-4">
+        <Field label="URL du serveur Jellyfin" htmlFor="jf-baseUrl" error={fieldErrors.baseUrl}>
+          <Input
+            id="jf-baseUrl"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="http://192.168.1.50:8096"
+            required
+          />
+        </Field>
+        <Field label="Clé API Jellyfin" htmlFor="jf-apiKey" error={fieldErrors.apiKey}>
+          <Input
+            id="jf-apiKey"
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={isConnected ? "Laisser vide pour conserver la clé actuelle" : "Clé API créée dans Jellyfin"}
+            required={!isConnected}
+          />
+        </Field>
+        <Button type="button" variant="secondary" size="sm" onClick={handleTest} disabled={testing}>
+          {testing ? <Spinner /> : "Tester la connexion"}
+        </Button>
+        {serverName && <p className="text-xs text-muted">Serveur détecté : {serverName}</p>}
+      </div>
 
-      <p className="border-t border-border pt-3 text-xs text-muted">
-        Une fois connecté, ce que tu fais dans Jellyfin (vu, note, favori) remonte ici, et ce que tu fais ici redescend
-        vers ton serveur — même s'il n'est accessible que sur ton réseau local.
-      </p>
+      {showUserPicker && (
+        <div className="space-y-4 border-t border-border pt-4">
+          <Field label="Utilisateur Jellyfin" htmlFor="jf-user" error={fieldErrors.jellyfinUserId}>
+            <select
+              id="jf-user"
+              value={selectedUser}
+              onChange={(e) => setSelectedUser(e.target.value)}
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              required
+            >
+              <option value="">Choisir un utilisateur…</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+              {connection?.jellyfinUserId && !users.some((u) => u.id === connection.jellyfinUserId) && (
+                <option value={connection.jellyfinUserId}>{connection.jellyfinUserName ?? connection.jellyfinUserId}</option>
+              )}
+            </select>
+          </Field>
+          <Field label="Nom (optionnel)" htmlFor="jf-name">
+            <Input id="jf-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jellyfin maison" />
+          </Field>
+          <Button type="button" onClick={handleConnect} disabled={connecting || !selectedUser}>
+            {connecting ? <Spinner /> : <><Link2 className="h-4 w-4" /> {isConnected ? "Mettre à jour" : "Connecter"}</>}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
