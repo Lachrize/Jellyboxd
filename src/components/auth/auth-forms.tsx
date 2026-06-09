@@ -24,10 +24,10 @@ export function LoginForm({ next }: { next?: string }) {
     <form action={action} className="space-y-4">
       <FormError message={state?.error} />
       <input type="hidden" name="next" value={next ?? "/home"} />
-      <Field label="E-mail ou pseudo" htmlFor="identifier" error={state?.fieldErrors?.identifier}>
+      <Field label="Utilisateur Jellyfin" htmlFor="identifier" error={state?.fieldErrors?.identifier}>
         <Input id="identifier" name="identifier" autoComplete="username" autoFocus required />
       </Field>
-      <Field label="Mot de passe" htmlFor="password" error={state?.fieldErrors?.password}>
+      <Field label="Mot de passe Jellyfin" htmlFor="password" error={state?.fieldErrors?.password}>
         <Input id="password" name="password" type="password" autoComplete="current-password" required />
       </Field>
       <Button type="submit" size="lg" className="w-full" disabled={pending}>

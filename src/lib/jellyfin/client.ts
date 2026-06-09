@@ -9,6 +9,11 @@ export interface JellyfinUser {
   Name: string;
 }
 
+export interface JellyfinAuthResponse {
+  User: JellyfinUser;
+  AccessToken: string;
+}
+
 export interface JellyfinProviderIds {
   Tmdb?: string;
   Imdb?: string;
@@ -183,4 +188,31 @@ export function normalizeJellyfinUrl(raw: string): string {
   const trimmed = raw.trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(trimmed)) return `http://${trimmed}`;
   return trimmed;
+}
+
+/** Authenticate a Jellyfin user with their normal Jellyfin username/password. */
+export async function authenticateJellyfinUser(
+  baseUrl: string,
+  username: string,
+  password: string,
+): Promise<JellyfinAuthResponse> {
+  const normalized = normalizeJellyfinUrl(baseUrl);
+  const res = await fetch(`${normalized}/Users/AuthenticateByName`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Emby-Authorization":
+        'MediaBrowser Client="Jellyboxd", Device="Jellyboxd Web", DeviceId="jellyboxd-web", Version="1.0.0"',
+    },
+    body: JSON.stringify({ Username: username, Pw: password }),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new JellyfinApiError(res.status, body || res.statusText);
+  }
+
+  return (await res.json()) as JellyfinAuthResponse;
 }

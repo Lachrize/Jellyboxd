@@ -100,4 +100,36 @@ export async function getJellyfinConnectionPreview(userId: string) {
   };
 }
 
+export async function getPrimaryJellyfinServer(): Promise<{
+  sourceId: string;
+  ownerId: string;
+  baseUrl: string;
+  apiKey: string;
+  serverId: string;
+  name: string;
+} | null> {
+  const source = await db.importSource.findFirst({
+    where: { kind: "JELLYFIN", status: { in: ["CONNECTED", "SYNCING"] } },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, userId: true, name: true, baseUrl: true, config: true },
+  });
+  if (!source?.baseUrl) return null;
+
+  const config = parseConfig(source.config);
+  if (!config) return null;
+
+  try {
+    return {
+      sourceId: source.id,
+      ownerId: source.userId,
+      baseUrl: source.baseUrl,
+      apiKey: decryptSecret(config.apiKeyEnc),
+      serverId: config.serverId,
+      name: source.name,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export { normalizeJellyfinUrl };

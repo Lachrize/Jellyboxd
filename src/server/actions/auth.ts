@@ -7,7 +7,9 @@ import { db } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession, destroySession } from "@/lib/auth/session";
 import { requireUser } from "@/lib/auth/current-user";
-import { createLocalUser } from "@/lib/services/users";
+import { authenticateJellyfinUser, JellyfinApiError } from "@/lib/jellyfin/client";
+import { buildConfig, getPrimaryJellyfinServer } from "@/lib/jellyfin/config";
+import { createLocalUser, randomPasswordHash, uniqueEmail, uniqueUsername } from "@/lib/services/users";
 import { loginSchema, profileSchema, registerSchema } from "@/lib/validation/auth";
 import { z } from "zod";
 
@@ -73,13 +75,71 @@ export async function loginAction(_prev: AuthState, formData: FormData): Promise
     });
     // Constant-ish work even on missing user to limit enumeration.
     const ok = user ? await verifyPassword(password, user.passwordHash) : false;
-    if (!user || !ok) return { error: "Identifiants incorrects." };
-    await createSession(user.id, await sessionMeta());
+    if (user && ok) {
+      await createSession(user.id, await sessionMeta());
+    } else {
+      const jellyfinUserId = await loginWithJellyfin(identifier, password);
+      if (!jellyfinUserId) return { error: "Identifiants Jellyfin incorrects." };
+      await createSession(jellyfinUserId, await sessionMeta());
+    }
   } catch {
     return { error: "Une erreur est survenue. Réessayez." };
   }
 
   redirect(next.startsWith("/") ? next : "/home");
+}
+
+async function loginWithJellyfin(identifier: string, password: string): Promise<string | null> {
+  const server = await getPrimaryJellyfinServer();
+  if (!server) return null;
+
+  let auth: Awaited<ReturnType<typeof authenticateJellyfinUser>>;
+  try {
+    auth = await authenticateJellyfinUser(server.baseUrl, identifier, password);
+  } catch (error) {
+    if (error instanceof JellyfinApiError && (error.status === 400 || error.status === 401 || error.status === 403)) {
+      return null;
+    }
+    throw error;
+  }
+
+  const existing = await db.user.findFirst({
+    where: { jellyfinServerId: server.serverId, jellyfinUserId: auth.User.Id },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const username = await uniqueUsername(auth.User.Name);
+  const user = await createLocalUser({
+    email: await uniqueEmail(username),
+    username,
+    name: auth.User.Name,
+    passwordHash: await randomPasswordHash(),
+    jellyfinUserId: auth.User.Id,
+  });
+
+  await db.user.update({
+    where: { id: user.id },
+    data: { jellyfinServerId: server.serverId },
+  });
+
+  await db.importSource.create({
+    data: {
+      userId: user.id,
+      kind: "JELLYFIN",
+      name: server.name,
+      baseUrl: server.baseUrl,
+      status: "CONNECTED",
+      config: buildConfig({
+        apiKey: server.apiKey,
+        jellyfinUserId: auth.User.Id,
+        jellyfinUserName: auth.User.Name,
+        serverId: server.serverId,
+      }),
+    },
+  });
+
+  return user.id;
 }
 
 export async function logoutAction() {
