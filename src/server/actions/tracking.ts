@@ -8,8 +8,8 @@ import { resolveMediaRef } from "@/lib/media/upsert";
 import { recordActivity } from "@/lib/services/activity";
 import { getOrCreateWatchlist } from "@/lib/services/lists";
 import { ensureSeenMedia } from "@/lib/services/seen";
+import { pushToJellyfin } from "@/lib/jellyfin/outbound";
 import { slugify } from "@/lib/utils";
-import { WATCH_PROGRESS_STATUSES } from "@/lib/constants";
 import { logWatchSchema, rateSchema } from "@/lib/validation/tracking";
 import { mediaRefSchema } from "@/lib/validation/media";
 
@@ -62,6 +62,7 @@ export async function rateAction(input: unknown): Promise<ActionResult> {
 
   if (parsed.data.value == null) {
     await db.rating.deleteMany({ where: { userId: user.id, mediaItemId } });
+    await pushToJellyfin(user.id, mediaItemId, { rating: null });
   } else {
     await db.rating.upsert({
       where: { userId_mediaItemId: { userId: user.id, mediaItemId } },
@@ -79,6 +80,8 @@ export async function rateAction(input: unknown): Promise<ActionResult> {
       data: { rating: parsed.data.value },
       visibility,
     });
+    // Rating implies "seen" in Jellyboxd -> mirror both to Jellyfin.
+    await pushToJellyfin(user.id, mediaItemId, { rating: parsed.data.value, played: true });
   }
   refreshFeeds();
   return { ok: true };
@@ -195,6 +198,12 @@ export async function logWatchAction(input: unknown): Promise<ActionResult> {
     visibility,
   });
 
+  // Mirror the watch (and rating, if any) to Jellyfin. Review text = phase 3.
+  await pushToJellyfin(user.id, mediaItemId, {
+    played: true,
+    ...(d.rating != null ? { rating: d.rating } : {}),
+  });
+
   refreshFeeds();
   return { ok: true, data: { entryId: entry.id } };
 }
@@ -226,44 +235,6 @@ export async function toggleWatchlistAction(
   await recordActivity({ actorId: user.id, type: "WATCHLIST_ADDED", mediaItemId });
   refreshFeeds();
   return { ok: true, data: { inWatchlist: true } };
-}
-
-const seriesStatusInput = z.object({
-  ref: mediaRefSchema,
-  status: z.enum(WATCH_PROGRESS_STATUSES),
-});
-
-/** Set a series viewing status (en cours / terminée / en pause / abandonnée). */
-export async function setSeriesStatusAction(input: unknown): Promise<ActionResult> {
-  const user = await requireUser();
-  const parsed = seriesStatusInput.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Données invalides." };
-
-  const mediaItemId = await resolveMediaRef(parsed.data.ref);
-  if (!mediaItemId) return { ok: false, error: "Série introuvable." };
-  const series = await db.series.findUnique({ where: { mediaItemId }, select: { id: true } });
-  if (!series) return { ok: false, error: "Série introuvable." };
-
-  const status = parsed.data.status;
-  await db.seriesProgress.upsert({
-    where: { userId_seriesId: { userId: user.id, seriesId: series.id } },
-    update: {
-      status,
-      completedAt: status === "COMPLETED" ? new Date() : null,
-      startedAt: status === "WATCHING" ? new Date() : undefined,
-    },
-    create: {
-      userId: user.id,
-      seriesId: series.id,
-      status,
-      startedAt: status === "WATCHING" ? new Date() : null,
-      completedAt: status === "COMPLETED" ? new Date() : null,
-    },
-  });
-
-  await recordActivity({ actorId: user.id, type: "SERIES_STATUS", mediaItemId, data: { status } });
-  refreshFeeds();
-  return { ok: true };
 }
 
 /** Quick "mark watched today" — a one-tap diary entry without a form. */
@@ -322,6 +293,8 @@ export async function setMediaWatchedAction(input: {
     }),
   ]);
 
+  await pushToJellyfin(user.id, mediaItemId, { played: input.watched });
+
   refreshFeeds();
   return { ok: true, data: { watched: Boolean(seen || rating) } };
 }
@@ -364,6 +337,7 @@ export async function toggleMediaLikeAction(
       targetId: mediaItemId,
     });
   }
+  await pushToJellyfin(user.id, mediaItemId, { favorite: !existing });
   revalidatePath("/home");
   return { ok: true, data: { liked: !existing } };
 }

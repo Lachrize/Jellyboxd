@@ -2,14 +2,19 @@ import type { Metadata } from "next";
 import { LogOut } from "lucide-react";
 import { requireUser } from "@/lib/auth/current-user";
 import { logoutAction } from "@/server/actions/auth";
+import { getConnectionStatus } from "@/lib/jellyfin/connection";
+import { hasSyncToken } from "@/lib/jellyfin/sync-token";
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ProfileForm } from "@/components/settings/profile-form";
+import { JellyfinConnect } from "@/components/settings/jellyfin-connect";
 
 export const metadata: Metadata = { title: "Paramètres" };
 
 export default async function SettingsPage() {
   const user = await requireUser();
+  const [jellyfinStatus, tokenExists] = await Promise.all([getConnectionStatus(user.id), hasSyncToken(user.id)]);
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
@@ -27,6 +32,11 @@ export default async function SettingsPage() {
             />
           </CardBody>
         </Card>
+      </section>
+
+      <section>
+        <h2 className="mb-3 font-serif text-lg text-foreground">Jellyfin</h2>
+        <JellyfinConnect status={jellyfinStatus} hasToken={tokenExists} appUrl={appUrl} />
       </section>
 
       <section>

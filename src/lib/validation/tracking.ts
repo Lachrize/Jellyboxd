@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { mediaRefSchema } from "@/lib/validation/media";
-import { MAX_RATING, VISIBILITIES, WATCH_PROGRESS_STATUSES } from "@/lib/constants";
+import { MAX_RATING, VISIBILITIES } from "@/lib/constants";
 
 const ratingValue = z.coerce.number().int().min(1).max(MAX_RATING);
 const visibility = z.enum(VISIBILITIES).optional();
@@ -28,11 +28,6 @@ export const reviewSchema = z.object({
   body: z.string().trim().min(1, "La critique ne peut pas être vide").max(10_000),
   rating: ratingValue.optional().nullable(),
   containsSpoilers: z.coerce.boolean().optional().default(false),
-});
-
-export const seriesStatusSchema = z.object({
-  seriesId: z.string().cuid(),
-  status: z.enum(WATCH_PROGRESS_STATUSES),
 });
 
 export type LogWatchInput = z.infer<typeof logWatchSchema>;

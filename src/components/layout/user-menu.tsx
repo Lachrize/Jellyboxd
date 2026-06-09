@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { BarChart3, BookMarked, List, LogOut, Settings, User } from "lucide-react";
+import { BarChart3, BookMarked, List, LogOut, Settings, Shield, User } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { logoutAction } from "@/server/actions/auth";
 
@@ -10,10 +10,12 @@ export function UserMenu({
   username,
   name,
   avatarUrl,
+  isAdmin = false,
 }: {
   username: string;
   name: string | null;
   avatarUrl: string | null;
+  isAdmin?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -32,6 +34,7 @@ export function UserMenu({
     { href: "/listes", label: "Mes listes", icon: List },
     { href: "/stats", label: "Statistiques", icon: BarChart3 },
     { href: "/parametres", label: "Paramètres", icon: Settings },
+    ...(isAdmin ? [{ href: "/admin", label: "Administration", icon: Shield }] : []),
   ];
 
   return (

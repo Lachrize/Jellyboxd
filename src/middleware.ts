@@ -7,7 +7,7 @@ const COOKIE_NAME = process.env.SESSION_COOKIE || "jellyboxd_session";
  * only checks for the *presence* of the session cookie to keep protected pages
  * snappy. Real validation happens in server components via `requireUser()`.
  */
-const PROTECTED = [/^\/home/, /^\/journal/, /^\/stats/, /^\/parametres/, /^\/import/, /^\/listes/];
+const PROTECTED = [/^\/home/, /^\/journal/, /^\/stats/, /^\/parametres/, /^\/import/, /^\/listes/, /^\/admin/];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

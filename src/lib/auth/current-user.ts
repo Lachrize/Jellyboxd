@@ -9,6 +9,7 @@ export type SafeUser = {
   name: string | null;
   bio: string | null;
   avatarUrl: string | null;
+  isAdmin: boolean;
   defaultVisibility: string;
   createdAt: Date;
 };
@@ -28,6 +29,7 @@ export const getCurrentUser = cache(async (): Promise<SafeUser | null> => {
     name: user.name,
     bio: user.bio,
     avatarUrl: user.avatarUrl,
+    isAdmin: user.isAdmin,
     defaultVisibility: user.defaultVisibility,
     createdAt: user.createdAt,
   };
@@ -37,5 +39,13 @@ export const getCurrentUser = cache(async (): Promise<SafeUser | null> => {
 export async function requireUser(): Promise<SafeUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  return user;
+}
+
+/** Use in admin-only server components/actions. Non-admins are bounced home. */
+export async function requireAdmin(): Promise<SafeUser> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!user.isAdmin) redirect("/home");
   return user;
 }

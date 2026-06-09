@@ -16,7 +16,6 @@ import { DetailHero, FactsCard, SectionTitle } from "@/components/media/detail-h
 import { CastRow } from "@/components/media/cast-row";
 import { PublicRatingBadge } from "@/components/media/public-rating-badge";
 import { MediaActions } from "@/components/tracking/media-actions";
-import { SeriesStatusControl } from "@/components/tracking/series-status";
 import { ViewerEntries } from "@/components/tracking/viewer-entries";
 import { ReviewSection } from "@/components/social/review-section";
 
@@ -130,7 +129,6 @@ export default async function SeriesPage({ params }: Params) {
             isAuthed={Boolean(user)}
             defaultVisibility={user?.defaultVisibility ?? "PUBLIC"}
           />
-          <SeriesStatusControl mediaRef={mediaRef} initialStatus={state.seriesStatus} isAuthed={Boolean(user)} />
           {user && totalEpisodes > 0 && (
             <div className="surface-card p-4">
               <div className="mb-2 flex items-center justify-between text-sm">

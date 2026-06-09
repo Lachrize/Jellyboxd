@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession, destroySession } from "@/lib/auth/session";
 import { requireUser } from "@/lib/auth/current-user";
-import { getOrCreateWatchlist } from "@/lib/services/lists";
+import { createLocalUser } from "@/lib/services/users";
 import { loginSchema, profileSchema, registerSchema } from "@/lib/validation/auth";
 import { z } from "zod";
 
@@ -48,10 +48,7 @@ export async function registerAction(_prev: AuthState, formData: FormData): Prom
         error: existing.email === email ? "Cet e-mail est déjà utilisé." : "Ce pseudo est déjà pris.",
       };
     }
-    const user = await db.user.create({
-      data: { email, username, name: name || null, passwordHash: await hashPassword(password) },
-    });
-    await getOrCreateWatchlist(user.id);
+    const user = await createLocalUser({ email, username, name: name || null, passwordHash: await hashPassword(password) });
     await createSession(user.id, await sessionMeta());
   } catch {
     return { error: "Une erreur est survenue. Réessayez." };

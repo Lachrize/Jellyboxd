@@ -20,7 +20,7 @@ export function SiteHeader({ user }: { user: SafeUser | null }) {
           <ThemeToggle />
           <SearchBar className="hidden w-56 lg:block" />
           {user ? (
-            <UserMenu username={user.username} name={user.name} avatarUrl={user.avatarUrl} />
+            <UserMenu username={user.username} name={user.name} avatarUrl={user.avatarUrl} isAdmin={user.isAdmin} />
           ) : (
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" asChild>
