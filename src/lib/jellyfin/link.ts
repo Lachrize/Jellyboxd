@@ -10,12 +10,21 @@ export interface LinkInput {
   username: string;
 }
 
-/** Link a Jellyfin identity to an already-authenticated Jellyboxd account. */
-export async function linkExistingAccount(userId: string, input: LinkInput): Promise<void> {
+/** Issue a fresh single-use login code, replacing the user's previous unused one. */
+export async function issueClaimCode(userId: string): Promise<string> {
+  await db.claimCode.deleteMany({ where: { userId, usedAt: null } });
+  const code = randomBytes(24).toString("base64url");
+  await db.claimCode.create({ data: { code, userId, expiresAt: new Date(Date.now() + 15 * 60 * 1000) } });
+  return code;
+}
+
+/** Link a Jellyfin identity to an authenticated account; returns a fresh login code. */
+export async function linkExistingAccount(userId: string, input: LinkInput): Promise<string> {
   await db.user.update({
     where: { id: userId },
     data: { jellyfinUserId: input.jellyfinUserId, jellyfinServerId: input.serverId },
   });
+  return issueClaimCode(userId);
 }
 
 export type BootstrapResult =
@@ -24,9 +33,8 @@ export type BootstrapResult =
 
 /**
  * Find-or-create the Jellyboxd account for a Jellyfin user (keyed by
- * server + user id). Returns a sync token (for the plugin) and a single-use
- * claim code (to log into the website). If the account already has a token, it
- * is considered claimed and we don't hand out new credentials (anti-takeover).
+ * server + user id). Returns a sync token + a login code. If the account already
+ * has a token (claimed), we don't hand out new credentials (anti-takeover).
  */
 export async function bootstrapJellyfinAccount(input: LinkInput): Promise<BootstrapResult> {
   const existing = await db.user.findFirst({
@@ -56,11 +64,7 @@ export async function bootstrapJellyfinAccount(input: LinkInput): Promise<Bootst
   }
 
   const token = await regenerateSyncToken(userId);
-  const claimCode = randomBytes(24).toString("base64url");
-  await db.claimCode.create({
-    data: { code: claimCode, userId, expiresAt: new Date(Date.now() + 15 * 60 * 1000) },
-  });
-
+  const claimCode = await issueClaimCode(userId);
   return { mode: "bootstrap", token, claimCode, created };
 }
 

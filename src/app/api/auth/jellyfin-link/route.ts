@@ -30,10 +30,13 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(json);
   if (!parsed.success) return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 400 });
 
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/+$/, "");
+  const claimUrl = (code: string) => `${appUrl}/claim?code=${encodeURIComponent(code)}`;
+
   const owner = await resolveUserBySyncToken(request.headers.get("authorization"));
   if (owner) {
-    await linkExistingAccount(owner.userId, parsed.data);
-    return NextResponse.json({ ok: true, mode: "linked" });
+    const code = await linkExistingAccount(owner.userId, parsed.data);
+    return NextResponse.json({ ok: true, mode: "linked", claimUrl: claimUrl(code) });
   }
 
   const res = await bootstrapJellyfinAccount(parsed.data);
@@ -41,11 +44,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, mode: "already_linked" });
   }
 
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/+$/, "");
-  return NextResponse.json({
-    ok: true,
-    mode: "bootstrap",
-    token: res.token,
-    claimUrl: `${appUrl}/claim?code=${encodeURIComponent(res.claimCode)}`,
-  });
+  return NextResponse.json({ ok: true, mode: "bootstrap", token: res.token, claimUrl: claimUrl(res.claimCode) });
 }
