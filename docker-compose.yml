@@ -8,8 +8,12 @@ services:
         NEXT_PUBLIC_APP_URL: http://localhost:3002
     container_name: jellyboxd
     restart: unless-stopped
+    # Optional: create .env.docker (from .env.docker.example) to set TMDB_API_KEY,
+    # pin secrets, or change NEXT_PUBLIC_APP_URL. Not required — the container
+    # auto-generates AUTH_SECRET and JELLYBOXD_SYNC_KEY on first run.
     env_file:
-      - .env.docker
+      - path: .env.docker
+        required: false
     environment:
       NODE_ENV: production
       PORT: 3000

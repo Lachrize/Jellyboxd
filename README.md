@@ -11,7 +11,24 @@ PWA sociale de tracking, notation et critique — films **et** séries, nativeme
 
 Jellyboxd est un « Letterboxd pour tout » : un journal de visionnage premium où les **séries sont des citoyennes de première classe** (progression saison/épisode, statuts *en cours / en pause / terminée / abandonnée*) au même titre que les films. Le produit est pensé autour de **sources média interchangeables** — TMDB aujourd'hui, **Jellyfin demain** — sans dette d'architecture.
 
-> Ce dépôt contient une V1 « cœur en profondeur » : un vrai backend (auth par sessions, base de données branchée, CRUD complet), un design system éditorial, et toutes les pages principales.
+> Ce dépôt contient une V1 « cœur en profondeur » : un vrai backend (auth par sessions, base de données branchée, CRUD complet), un design system éditorial, et toutes les pages principales. **La synchronisation Jellyfin ↔ Jellyboxd (notes / vu / favoris, dans les deux sens) est opérationnelle** via un plugin Jellyfin.
+
+## ⚡ Démarrage en 2 étapes
+
+```bash
+# 1. Lancer Jellyboxd (rien à configurer : les secrets sont auto-générés)
+docker compose up -d --build
+```
+
+Jellyboxd tourne sur **http://localhost:3002**. Ouvre-le, crée ton compte admin, puis connecte ton serveur Jellyfin.
+
+```
+# 2. Synchroniser avec Jellyfin (notes/vu/favoris dans les deux sens)
+#    → installe le plugin "Jellyboxd Sync" dans Jellyfin et colle la clé
+#    affichée dans Jellyboxd → Paramètres → Synchronisation Jellyfin.
+```
+
+Plugin : https://github.com/Lachrize/jellyfin-plugin-jellyboxd — détails dans [Synchronisation Jellyfin](#synchronisation-jellyfin-plugin).
 
 ## Sommaire
 
@@ -25,7 +42,7 @@ Jellyboxd est un « Letterboxd pour tout » : un journal de visionnage premium o
 - [Déploiement Docker sur NAS](#déploiement-docker-sur-nas)
 - [Comptes de démonstration](#comptes-de-démonstration)
 - [Activer la vraie data (TMDB)](#activer-la-vraie-data-tmdb)
-- [Préparation Jellyfin](#préparation-jellyfin)
+- [Synchronisation Jellyfin](#synchronisation-jellyfin-plugin)
 - [PWA](#pwa)
 - [Scripts](#scripts)
 - [Prochaines étapes](#prochaines-étapes-priorisées)
@@ -151,33 +168,26 @@ npm run dev          # http://localhost:3000
 
 C'est tout — l'app tourne **hors-ligne** grâce au catalogue seed intégré (≈15 films, 9 séries avec saisons/épisodes). Le fichier `.env` fourni contient des valeurs de dev prêtes à l'emploi.
 
-## Déploiement Docker sur NAS
+## Déploiement Docker
 
-Le conteneur écoute en interne sur `3000` et `docker-compose.yml` l'expose sur le port **`3002`** du NAS.
-
-```bash
-# 1. Copier l'exemple d'environnement Docker
-cp .env.docker.example .env.docker
-
-# 2. Éditer .env.docker
-# - AUTH_SECRET : valeur forte avec `openssl rand -base64 32`
-# - NEXT_PUBLIC_APP_URL : URL de votre NAS, par exemple http://192.168.1.50:3002
-# - TMDB_API_KEY : recommandé pour le catalogue réel
-
-# 3. Construire et lancer
-docker compose up -d --build
-
-# 4. Voir les logs
-docker compose logs -f jellyboxd
-```
-
-La base SQLite est persistée dans `./data/jellyboxd.db` sur le NAS. Au démarrage, le conteneur applique automatiquement le schéma Prisma avec `prisma db push`.
-
-Pour arrêter :
+Le conteneur écoute en interne sur `3000` et `docker-compose.yml` l'expose sur le port **`3002`** de l'hôte.
 
 ```bash
-docker compose down
+docker compose up -d --build      # c'est tout
+docker compose logs -f jellyboxd  # (optionnel) suivre les logs
 ```
+
+**Aucune configuration requise.** Au premier démarrage, le conteneur :
+
+- génère et persiste les secrets `AUTH_SECRET` et `JELLYBOXD_SYNC_KEY` (dans le volume `./data`, stables entre redémarrages) ;
+- applique le schéma Prisma (`prisma db push`) ;
+- affiche la **clé de synchronisation** dans les logs (tu la retrouveras aussi dans l'app, voir [Synchronisation Jellyfin](#synchronisation-jellyfin-plugin)).
+
+Jellyboxd est alors disponible sur **http://localhost:3002**. La base SQLite vit dans `./data/jellyboxd.db`.
+
+**Optionnel** — pour personnaliser, copie `.env.docker.example` → `.env.docker` et règle ce que tu veux (`TMDB_API_KEY` pour le vrai catalogue, `NEXT_PUBLIC_APP_URL` si tu n'es pas sur `localhost`, ou pour figer tes propres secrets). Le fichier n'est pas obligatoire.
+
+Pour arrêter : `docker compose down`.
 
 ## Comptes de démonstration
 
@@ -199,14 +209,26 @@ Le repli seed fonctionne sans clé. Pour brancher le catalogue **réel** (recher
 
 Aucune autre modification — c'est tout l'intérêt de l'abstraction.
 
-## Préparation Jellyfin
+## Synchronisation Jellyfin (plugin)
 
-La page **Importer & synchroniser** (`/import`) permet déjà d'enregistrer un serveur (entité `ImportSource` réelle, CRUD fonctionnel). L'intégration complète est préparée mais volontairement non câblée :
+Jellyboxd synchronise **notes, vu et favoris dans les deux sens** avec Jellyfin, pour **tous les utilisateurs** (chacun sur son propre compte), via le plugin [**Jellyboxd Sync**](https://github.com/Lachrize/jellyfin-plugin-jellyboxd).
 
-- `ExternalMapping (provider, externalId)` : déduplication + clé de synchro
-- `ImportSource` : serveur connecté, statut, config
-- Pipeline `resolveMediaRef` : point d'entrée unique qu'un importeur Jellyfin réutilisera tel quel
-- Il restera à écrire `JellyfinProvider implements MediaProvider` + un worker de synchro (bibliothèque → `MediaItem`, watch state → `WatchEntry`).
+**Comment ça marche** — le plugin (côté Jellyfin) interroge l'app via une clé partagée et route chaque changement par `jellyfinUserId` :
+
+- Jellyfin → Jellyboxd : le plugin pousse les changements en temps réel (`POST /api/sync/event`).
+- Jellyboxd → Jellyfin : l'app met les changements dans une file (`PendingSync`) que le plugin récupère toutes les ~3 s (`GET/POST /api/sync/pending`) et applique au bon utilisateur.
+- Films & séries entières : vu + note + favori. Saisons & épisodes : vu.
+
+**Mise en place (admin, une fois) :**
+
+1. Connecte ton serveur Jellyfin dans **Jellyboxd → Paramètres → Jellyfin** (URL + clé API Jellyfin). Cela crée/relie automatiquement un compte Jellyboxd pour chaque utilisateur Jellyfin.
+   - ⚠️ Si Jellyboxd tourne en Docker et Jellyfin sur l'hôte, utilise `http://host.docker.internal:8096` (pas `localhost`).
+2. Installe le plugin **Jellyboxd Sync** dans Jellyfin (voir le [README du plugin](https://github.com/Lachrize/jellyfin-plugin-jellyboxd)).
+3. Dans la config du plugin : renseigne l'**URL Jellyboxd**, colle la **clé de synchronisation** (affichée dans **Paramètres → Synchronisation Jellyfin**), et **laisse « Jellyfin username » vide** (= tous les comptes).
+
+C'est tout : tout le monde peut noter depuis Jellyfin **ou** Jellyboxd, sans configuration individuelle.
+
+> La clé `JELLYBOXD_SYNC_KEY` est auto-générée par le conteneur ; elle s'affiche pour l'admin dans Paramètres (et dans les logs Docker au démarrage).
 
 ## PWA
 
