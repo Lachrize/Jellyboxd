@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { CredentialsForm } from "@/components/settings/credentials-form";
 import { JellyfinConnect } from "@/components/settings/jellyfin-connect";
+import { PluginSyncCard } from "@/components/settings/plugin-sync-card";
 
 export const metadata: Metadata = { title: "Paramètres" };
 
 export default async function SettingsPage() {
   const user = await requireUser();
   const jellyfin = await getJellyfinConnectionPreview(user.id);
+  const syncKey = process.env.JELLYBOXD_SYNC_KEY?.trim();
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
@@ -39,6 +41,13 @@ export default async function SettingsPage() {
         <h2 className="mb-3 font-serif text-lg text-foreground">Jellyfin</h2>
         <JellyfinConnect connection={jellyfin} />
       </section>
+
+      {user.isAdmin && syncKey ? (
+        <section>
+          <h2 className="mb-3 font-serif text-lg text-foreground">Synchronisation Jellyfin (plugin)</h2>
+          <PluginSyncCard syncKey={syncKey} />
+        </section>
+      ) : null}
 
       <section>
         <h2 className="mb-3 font-serif text-lg text-foreground">Compte</h2>
