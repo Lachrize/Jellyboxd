@@ -75,11 +75,23 @@ export async function resolveJellyfinItem(input: {
   }
 
   if (mediaItemId) {
-    await db.externalMapping.upsert({
+    // Cache the Jellyfin item id as a JELLYFIN mapping. ExternalMapping is unique
+    // on BOTH (provider, externalId) and (mediaItemId, provider), so a plain
+    // upsert keyed on one axis blows up when the other already holds a stale row
+    // (e.g. the same movie previously cached under a different Jellyfin item id).
+    // Only rewrite when it isn't already correct, clearing conflicts on either axis.
+    const existing = await db.externalMapping.findUnique({
       where: { provider_externalId: { provider: "JELLYFIN", externalId: input.jellyfinItemId } },
-      update: { mediaItemId },
-      create: { mediaItemId, provider: "JELLYFIN", externalId: input.jellyfinItemId },
+      select: { mediaItemId: true },
     });
+    if (existing?.mediaItemId !== mediaItemId) {
+      await db.externalMapping.deleteMany({
+        where: { provider: "JELLYFIN", OR: [{ externalId: input.jellyfinItemId }, { mediaItemId }] },
+      });
+      await db.externalMapping.create({
+        data: { mediaItemId, provider: "JELLYFIN", externalId: input.jellyfinItemId },
+      });
+    }
   }
 
   return mediaItemId;
