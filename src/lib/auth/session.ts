@@ -6,6 +6,13 @@ import { SESSION_DURATION_DAYS } from "@/lib/constants";
 const COOKIE_NAME = process.env.SESSION_COOKIE || "jellyboxd_session";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Mark the session cookie `Secure` only when the app is actually served over
+// HTTPS. Self-hosted Jellyboxd is usually reached over plain HTTP (e.g.
+// http://localhost:3002 or http://192.168.x.x:3002); a `Secure` cookie there is
+// dropped by the browser, which logs the user out on every refresh. Derive it
+// from the configured app URL so HTTPS deployments still get a secure cookie.
+const COOKIE_SECURE = (process.env.NEXT_PUBLIC_APP_URL ?? "").startsWith("https://");
+
 function generateToken(): string {
   return randomBytes(32).toString("base64url");
 }
@@ -38,7 +45,7 @@ export async function createSession(userId: string, meta: SessionMeta = {}): Pro
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: COOKIE_SECURE,
     sameSite: "lax",
     path: "/",
     expires: expiresAt,
