@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { getMediaProvider } from "@/lib/media";
 import { resolveMediaRef } from "@/lib/media/upsert";
 import { ensureSeenMedia } from "@/lib/services/seen";
+import { assertSafeUrl } from "@/lib/security/ssrf";
 import { slugify } from "@/lib/utils";
 import type { MediaProviderName } from "@/lib/constants";
 
@@ -107,18 +108,36 @@ async function resolveLetterboxdMovie(title: string, year: number | null) {
   return exact ?? null;
 }
 
+/** Letterboxd's own domains — the only hosts we'll fetch from a user CSV. */
+const LETTERBOXD_HOSTS = ["letterboxd.com", "boxd.it"];
+
 async function fetchLetterboxdTmdbRef(uri: string): Promise<{ externalId: string; kind: "MOVIE" | "SERIES" } | null> {
   if (!uri.startsWith("http")) return null;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
-    const res = await fetch(uri, {
-      redirect: "follow",
-      signal: controller.signal,
-      headers: { "user-agent": "Jellyboxd/1.0" },
-    });
-    if (!res.ok) return null;
+    // The URI comes from an uploaded CSV cell. Validate the host and follow
+    // redirects manually so each hop stays on Letterboxd and off the LAN —
+    // otherwise this is an authenticated SSRF into the internal network.
+    let current = uri;
+    let res: Response | null = null;
+    for (let hop = 0; hop < 5; hop += 1) {
+      await assertSafeUrl(current, { allowedHosts: LETTERBOXD_HOSTS });
+      res = await fetch(current, {
+        redirect: "manual",
+        signal: controller.signal,
+        headers: { "user-agent": "Jellyboxd/1.0" },
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location) return null;
+        current = new URL(location, current).toString();
+        continue;
+      }
+      break;
+    }
+    if (!res || !res.ok) return null;
     const html = await res.text();
     const tvId = html.match(/themoviedb\.org\/tv\/(\d+)/)?.[1];
     if (tvId) return { externalId: tvId, kind: "SERIES" };

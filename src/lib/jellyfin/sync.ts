@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import type { JellyfinItem } from "./client";
+import { avatarPathFor } from "./avatar";
 import { getJellyfinConnection } from "./config";
 import { applyInboundEvent, type InboundSyncEvent } from "./inbound";
 
@@ -72,6 +73,18 @@ export async function syncFromJellyfin(userId: string): Promise<SyncResult | Syn
       where: { id: conn.sourceId },
       data: { status: "CONNECTED", lastSyncedAt: new Date() },
     });
+
+    // Mirror the current Jellyfin profile picture (handles photos changed on the
+    // Jellyfin side between logins). Best-effort — never fail a sync over this.
+    try {
+      const jfUser = await conn.client.getUser(conn.jellyfinUserId);
+      await db.user.update({
+        where: { id: userId },
+        data: { avatarUrl: avatarPathFor({ ...jfUser, Id: conn.jellyfinUserId }) },
+      });
+    } catch {
+      // ignore avatar refresh failures
+    }
 
     return { ok: true, processed, applied, skipped, unmatched };
   } catch (error) {

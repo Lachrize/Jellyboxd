@@ -97,6 +97,23 @@ export class JellyfinClient {
     return this.request<JellyfinUser[]>("/Users");
   }
 
+  getUser(userId: string): Promise<JellyfinUser> {
+    return this.request<JellyfinUser>(`/Users/${userId}`);
+  }
+
+  /** Replace a user's profile picture. `base64` is the raw image, base64-encoded. */
+  uploadUserImage(userId: string, contentType: string, base64: string): Promise<void> {
+    return this.request<void>(`/Users/${userId}/Images/Primary`, {
+      method: "POST",
+      body: base64,
+      headers: { "Content-Type": contentType },
+    });
+  }
+
+  deleteUserImage(userId: string): Promise<void> {
+    return this.request<void>(`/Users/${userId}/Images/Primary`, { method: "DELETE" });
+  }
+
   getUserItems(
     userId: string,
     options: {

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { recordActivity } from "@/lib/services/activity";
+import { visibleVisibilitiesFor } from "@/lib/services/friends";
 import { LIKE_TARGETS } from "@/lib/constants";
 import { commentSchema } from "@/lib/validation/lists";
 import type { ActionResult } from "./tracking";
@@ -66,10 +67,38 @@ export async function toggleLikeAction(input: unknown): Promise<ActionResult<{ l
   return { ok: true, data: { liked: !existing } };
 }
 
+/** Whether `viewerId` is allowed to see (and therefore comment on) a target. */
+async function canViewCommentTarget(
+  viewerId: string,
+  targetType: "REVIEW" | "WATCH_ENTRY" | "LIST",
+  targetId: string,
+): Promise<boolean> {
+  if (targetType === "LIST") {
+    const list = await db.list.findUnique({ where: { id: targetId }, select: { userId: true, isPublic: true } });
+    if (!list) return false;
+    return list.userId === viewerId || list.isPublic;
+  }
+
+  const owner =
+    targetType === "REVIEW"
+      ? await db.review.findUnique({ where: { id: targetId }, select: { userId: true, visibility: true } })
+      : await db.watchEntry.findUnique({ where: { id: targetId }, select: { userId: true, visibility: true } });
+  if (!owner) return false;
+  if (owner.userId === viewerId) return true;
+  const allowed = await visibleVisibilitiesFor(owner.userId, viewerId);
+  return allowed === null || allowed.includes(owner.visibility);
+}
+
 export async function addCommentAction(input: unknown): Promise<ActionResult> {
   const user = await requireUser();
   const parsed = commentSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Commentaire invalide." };
+
+  // Don't let a comment be attached to a target the user can't see (or that
+  // doesn't exist) — otherwise comments could be planted on arbitrary ids.
+  if (!(await canViewCommentTarget(user.id, parsed.data.targetType, parsed.data.targetId))) {
+    return { ok: false, error: "Cible introuvable." };
+  }
 
   await db.comment.create({
     data: {

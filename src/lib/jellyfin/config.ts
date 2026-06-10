@@ -108,8 +108,15 @@ export async function getPrimaryJellyfinServer(): Promise<{
   serverId: string;
   name: string;
 } | null> {
+  // Only an ADMIN-owned server may act as the instance-wide login authority.
+  // Otherwise any regular user who connects their own (possibly malicious)
+  // Jellyfin would become the server everyone authenticates against.
   const source = await db.importSource.findFirst({
-    where: { kind: "JELLYFIN", status: { in: ["CONNECTED", "SYNCING"] } },
+    where: {
+      kind: "JELLYFIN",
+      status: { in: ["CONNECTED", "SYNCING"] },
+      user: { isAdmin: true },
+    },
     orderBy: { updatedAt: "desc" },
     select: { id: true, userId: true, name: true, baseUrl: true, config: true },
   });

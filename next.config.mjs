@@ -11,9 +11,10 @@ const nextConfig = {
     ],
   },
   experimental: {
-    // Server Actions are stable in 15, this only raises the body limit for reviews.
+    // Server Actions are stable in 15, this only raises the body limit for
+    // reviews and avatar image uploads.
     serverActions: {
-      bodySizeLimit: "2mb",
+      bodySizeLimit: "10mb",
     },
   },
 };

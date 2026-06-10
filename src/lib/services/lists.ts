@@ -11,7 +11,9 @@ export async function getOrCreateWatchlist(userId: string) {
       title: "Ma watchlist",
       slug: "watchlist",
       kind: "WATCHLIST",
-      isPublic: true,
+      // Private by default — consistent with the rest of the visibility model.
+      // Users can make it public from the list page if they want to share it.
+      isPublic: false,
     },
   });
 }

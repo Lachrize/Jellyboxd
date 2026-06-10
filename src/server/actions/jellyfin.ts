@@ -1,15 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser, requireUser } from "@/lib/auth/current-user";
-import { createSession } from "@/lib/auth/session";
 import { JellyfinApiError, JellyfinClient, normalizeJellyfinUrl } from "@/lib/jellyfin/client";
-import { buildConfig, getJellyfinConnectionPreview } from "@/lib/jellyfin/config";
+import { buildConfig, getJellyfinConnectionPreview, getPrimaryJellyfinServer } from "@/lib/jellyfin/config";
+import { assertSafeJellyfinUrl, SsrfError } from "@/lib/security/ssrf";
 import { syncFromJellyfin } from "@/lib/jellyfin/sync";
-import { provisionJellyfinUser, provisionJellyfinUsers } from "@/lib/jellyfin/users";
+import { provisionJellyfinUsers } from "@/lib/jellyfin/users";
 
 const connectSchema = z.object({
   baseUrl: z.string().trim().min(1, "URL requise"),
@@ -36,6 +35,7 @@ export type JellyfinFormState = {
 } | null;
 
 function jellyfinErrorMessage(error: unknown): string {
+  if (error instanceof SsrfError) return error.message;
   if (error instanceof JellyfinApiError) {
     if (error.status === 401) return "Clé API invalide.";
     if (error.status === 404) return "Serveur Jellyfin introuvable à cette adresse.";
@@ -50,9 +50,31 @@ function jellyfinErrorMessage(error: unknown): string {
   return "Connexion impossible.";
 }
 
-async function sessionMeta() {
-  const h = await headers();
-  return { userAgent: h.get("user-agent"), ip: h.get("x-forwarded-for") };
+/**
+ * Guards the instance-wide setup action. Anyone may run it ONLY during
+ * first-run bootstrap (no Jellyfin server configured yet). Once a server
+ * exists, only an authenticated admin may reconfigure it — otherwise a visitor
+ * could hijack the primary server record used to authenticate everyone.
+ */
+async function ensureSetupAllowed(): Promise<JellyfinFormState> {
+  const [currentUser, primary] = await Promise.all([getCurrentUser(), getPrimaryJellyfinServer()]);
+  if (primary && !currentUser?.isAdmin) {
+    return { error: "Serveur déjà configuré — connexion administrateur requise." };
+  }
+  return null;
+}
+
+/**
+ * Guards the connection probe. Allowed during bootstrap (no server yet) or for
+ * any authenticated user (settings re-test). Blocked for anonymous visitors
+ * once a server exists — that closes the unauthenticated SSRF scanner.
+ */
+async function ensureProbeAllowed(): Promise<JellyfinFormState> {
+  const [currentUser, primary] = await Promise.all([getCurrentUser(), getPrimaryJellyfinServer()]);
+  if (primary && !currentUser) {
+    return { error: "Authentification requise." };
+  }
+  return null;
 }
 
 async function resolveApiKey(userId: string | null, raw: string): Promise<string> {
@@ -75,6 +97,9 @@ async function resolveApiKey(userId: string | null, raw: string): Promise<string
 
 /** Probe Jellyfin and return the list of users (for the picker). */
 export async function testJellyfinConnectionAction(_prev: JellyfinFormState, formData: FormData): Promise<JellyfinFormState> {
+  const blocked = await ensureProbeAllowed();
+  if (blocked) return blocked;
+
   const user = await getCurrentUser();
   const apiKey = await resolveApiKey(user?.id ?? null, String(formData.get("apiKey") ?? ""));
   const parsed = testSchema.safeParse({
@@ -89,6 +114,7 @@ export async function testJellyfinConnectionAction(_prev: JellyfinFormState, for
 
   try {
     const baseUrl = normalizeJellyfinUrl(parsed.data.baseUrl);
+    await assertSafeJellyfinUrl(baseUrl);
     const client = new JellyfinClient(baseUrl, parsed.data.apiKey);
     const [info, users] = await Promise.all([client.getSystemInfo(), client.getUsers()]);
     return {
@@ -108,6 +134,9 @@ export async function testJellyfinConnectionAction(_prev: JellyfinFormState, for
  * logging anyone in. Each person then signs in with their own Jellyfin account.
  */
 export async function setupJellyfinServerAction(_prev: JellyfinFormState, formData: FormData): Promise<JellyfinFormState> {
+  const blocked = await ensureSetupAllowed();
+  if (blocked) return blocked;
+
   const parsed = setupSchema.safeParse({
     baseUrl: formData.get("baseUrl"),
     apiKey: formData.get("apiKey"),
@@ -120,6 +149,7 @@ export async function setupJellyfinServerAction(_prev: JellyfinFormState, formDa
 
   try {
     const baseUrl = normalizeJellyfinUrl(parsed.data.baseUrl);
+    await assertSafeJellyfinUrl(baseUrl);
     const client = new JellyfinClient(baseUrl, parsed.data.apiKey);
     const [info, users] = await Promise.all([client.getSystemInfo(), client.getUsers()]);
     const context = {
@@ -140,14 +170,18 @@ export async function setupJellyfinServerAction(_prev: JellyfinFormState, formDa
 
 /** Save Jellyfin URL + API key + linked user. */
 export async function connectJellyfinAction(_prev: JellyfinFormState, formData: FormData): Promise<JellyfinFormState> {
+  // Authentication is REQUIRED. The previous anonymous branch created a session
+  // and copied `isAdmin` from the caller-supplied Jellyfin server's policy —
+  // an unauthenticated privilege-escalation primitive. SSO sign-in must go
+  // through loginWithJellyfin (which verifies a password), never through here.
   const currentUser = await getCurrentUser();
-  const existingForCurrentUser = currentUser
-    ? await db.importSource.findFirst({
-        where: { userId: currentUser.id, kind: "JELLYFIN" },
-        select: { id: true, config: true },
-      })
-    : null;
-  const apiKey = await resolveApiKey(currentUser?.id ?? null, String(formData.get("apiKey") ?? ""));
+  if (!currentUser) return { error: "Authentification requise." };
+
+  const existing = await db.importSource.findFirst({
+    where: { userId: currentUser.id, kind: "JELLYFIN" },
+    select: { id: true, config: true },
+  });
+  const apiKey = await resolveApiKey(currentUser.id, String(formData.get("apiKey") ?? ""));
 
   const parsed = connectSchema.safeParse({
     baseUrl: formData.get("baseUrl"),
@@ -163,27 +197,15 @@ export async function connectJellyfinAction(_prev: JellyfinFormState, formData: 
 
   try {
     const baseUrl = normalizeJellyfinUrl(parsed.data.baseUrl);
+    await assertSafeJellyfinUrl(baseUrl);
     const client = new JellyfinClient(baseUrl, parsed.data.apiKey);
     const [info, users] = await Promise.all([client.getSystemInfo(), client.getUsers()]);
     const jellyfinUser = users.find((u) => u.Id === parsed.data.jellyfinUserId);
     if (!jellyfinUser) return { error: "Utilisateur Jellyfin introuvable." };
     const name = parsed.data.name?.trim() || info.ServerName || "Jellyfin";
 
-    let userId = currentUser?.id ?? null;
-    let existing = existingForCurrentUser;
+    const userId = currentUser.id;
     const context = { baseUrl, apiKey: parsed.data.apiKey, serverId: info.Id, serverName: name };
-
-    if (!userId) {
-      const provisioned = await provisionJellyfinUser(jellyfinUser, context);
-      userId = provisioned.userId;
-      await createSession(userId, await sessionMeta());
-      existing = await db.importSource.findFirst({
-        where: { userId, kind: "JELLYFIN" },
-        select: { id: true, config: true },
-      });
-    }
-
-    if (!userId) return { error: "Impossible de créer la session Jellyboxd." };
 
     const importedUsers = await provisionJellyfinUsers(users, context);
     const config = buildConfig({
@@ -245,6 +267,7 @@ export async function connectAuthenticatedJellyfinAction(
 
   try {
     const baseUrl = normalizeJellyfinUrl(parsed.data.baseUrl);
+    await assertSafeJellyfinUrl(baseUrl);
     const client = new JellyfinClient(baseUrl, parsed.data.apiKey);
     const [info, users] = await Promise.all([client.getSystemInfo(), client.getUsers()]);
     const jellyfinUser = users.find((u) => u.Id === parsed.data.jellyfinUserId);

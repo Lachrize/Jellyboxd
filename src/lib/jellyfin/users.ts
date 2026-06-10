@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { createLocalUser, randomPasswordHash, uniqueEmail, uniqueUsername } from "@/lib/services/users";
+import { avatarPathFor } from "./avatar";
 import { buildConfig } from "./config";
 import type { JellyfinUser } from "./client";
 
@@ -18,14 +19,6 @@ export interface ProvisionedJellyfinUser {
 
 export function isJellyfinAdmin(user: JellyfinUser): boolean {
   return Boolean(user.Policy?.IsAdministrator);
-}
-
-function jellyfinAvatarUrl(user: JellyfinUser): string | null {
-  if (!user.PrimaryImageTag && !user.HasPrimaryImage) return null;
-  const params = new URLSearchParams();
-  if (user.PrimaryImageTag) params.set("tag", user.PrimaryImageTag);
-  const query = params.toString();
-  return `/api/jellyfin/avatar/${encodeURIComponent(user.Id)}${query ? `?${query}` : ""}`;
 }
 
 export async function provisionJellyfinUser(
@@ -54,11 +47,15 @@ export async function provisionJellyfinUser(
     created = true;
   }
 
+  // NOTE: name/avatar/isAdmin are re-synced from Jellyfin on EVERY login. The
+  // Jellyfin server is the source of truth for admin rights (Jellyseerr model),
+  // so a Jellyboxd-side demotion is undone next time the user signs in if they
+  // are still a Jellyfin admin. Demote in Jellyfin to make it stick.
   await db.user.update({
     where: { id: userId },
     data: {
       name: jellyfinUser.Name,
-      avatarUrl: jellyfinAvatarUrl(jellyfinUser),
+      avatarUrl: avatarPathFor(jellyfinUser),
       jellyfinUserId: jellyfinUser.Id,
       jellyfinServerId: context.serverId,
       isAdmin,

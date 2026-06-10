@@ -28,6 +28,8 @@ export default async function SettingsPage() {
           <CardBody>
             <ProfileForm
               defaults={{ name: user.name ?? "", bio: user.bio ?? "", avatarUrl: user.avatarUrl ?? "" }}
+              displayName={user.name || user.username}
+              jellyfinLinked={Boolean(jellyfin?.hasApiKey)}
             />
           </CardBody>
         </Card>
