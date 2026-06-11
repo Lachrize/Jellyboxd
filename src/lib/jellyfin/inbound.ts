@@ -90,6 +90,8 @@ export async function applyInboundEvent(
   const mediaItemId = await resolveJellyfinItem({
     jellyfinItemId: event.item.jellyfinItemId,
     kind,
+    name: event.item.name,
+    year: event.item.year,
     providerIds: event.item.providerIds,
     seriesProviderIds: event.item.seriesProviderIds,
     seasonNumber: event.item.seasonNumber,

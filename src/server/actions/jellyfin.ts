@@ -47,6 +47,15 @@ function jellyfinErrorMessage(error: unknown): string {
   if (error instanceof TypeError) {
     return "Impossible de joindre le serveur — vérifiez l'URL et le réseau.";
   }
+  // Misconfigured AUTH_SECRET: the connection *probe* succeeds, but *saving* it
+  // fails because we encrypt the Jellyfin API key with AUTH_SECRET. Surface the
+  // real cause instead of the generic message below.
+  if (error instanceof Error && error.message.includes("AUTH_SECRET")) {
+    return "AUTH_SECRET manquant ou trop faible (≥ 32 caractères requis) : impossible de chiffrer la clé API. Régénère-le (`openssl rand -base64 32`) puis redéploie.";
+  }
+  // Anything else is unexpected — log it so it's visible in the server logs
+  // (the UI only ever shows this generic message).
+  console.error("[jellyboxd] Jellyfin connection failed:", error);
   return "Connexion impossible.";
 }
 
