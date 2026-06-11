@@ -185,7 +185,11 @@ docker compose logs -f jellyboxd  # (optionnel) suivre les logs
 
 Jellyboxd est alors disponible sur **http://localhost:3002**. La base SQLite vit dans `./data/jellyboxd.db`.
 
-**Optionnel** — pour personnaliser, copie `.env.docker.example` → `.env.docker` et règle ce que tu veux (`TMDB_API_KEY` pour le vrai catalogue, `NEXT_PUBLIC_APP_URL` si tu n'es pas sur `localhost`, ou pour figer tes propres secrets). Le fichier n'est pas obligatoire.
+**Optionnel** — pour personnaliser, copie `.env.docker.example` → `.env.docker` et règle ce que tu veux (`NEXT_PUBLIC_APP_URL` si tu n'es pas sur `localhost`, ou pour figer tes propres secrets). Pour juste *essayer* l'app, le fichier n'est pas obligatoire.
+
+> ⚠️ **`TMDB_API_KEY` est indispensable dès que tu veux synchroniser une vraie bibliothèque Jellyfin.** Sans elle, l'app n'utilise que le catalogue de démo (~15 titres) et **ne peut identifier aucun film/série réel** → rien ne se synchronise. Ajoute `TMDB_API_KEY=…` dans `.env.docker` puis `docker compose up -d`. Voir [Activer la vraie data](#activer-la-vraie-data-tmdb).
+>
+> 🪤 **Piège fréquent : en Docker, c'est `.env.docker` qui est lu — PAS `.env`.** Le `.env` ne sert qu'au mode dev (`npm run dev`) ; mettre `TMDB_API_KEY` dedans n'a **aucun effet** sur le conteneur. Si `.env.docker` n'existe pas encore : `cp .env.docker.example .env.docker`, renseigne `TMDB_API_KEY`, puis recrée le conteneur.
 
 Pour arrêter : `docker compose down`.
 
@@ -204,10 +208,12 @@ Mot de passe pour tous : **`password123`**
 Le repli seed fonctionne sans clé. Pour brancher le catalogue **réel** (recherche vivante, affiches, casting) :
 
 1. Créez une clé gratuite sur [themoviedb.org](https://www.themoviedb.org/settings/api) (clé v3 **ou** token de lecture v4).
-2. Renseignez `TMDB_API_KEY` dans `.env`.
+2. Renseignez `TMDB_API_KEY` dans `.env` (dev) **ou `.env.docker` (Docker)**.
 3. Redémarrez : Jellyboxd bascule automatiquement sur `TmdbProvider`.
 
 Aucune autre modification — c'est tout l'intérêt de l'abstraction.
+
+> **Pourquoi c'est requis pour la synchro Jellyfin :** la synchro identifie chaque film/série par son **ID TMDB**. Un élément de ta bibliothèque n'est reconnu que si l'app peut le résoudre via TMDB — sans clé, l'app ne connaît que le catalogue de démo et **aucun titre réel ne matche** (dans aucun des deux sens).
 
 ## Synchronisation Jellyfin (plugin)
 
@@ -219,16 +225,40 @@ Jellyboxd synchronise **notes, vu et favoris dans les deux sens** avec Jellyfin,
 - Jellyboxd → Jellyfin : l'app met les changements dans une file (`PendingSync`) que le plugin récupère toutes les ~3 s (`GET/POST /api/sync/pending`) et applique au bon utilisateur.
 - Films & séries entières : vu + note + favori. Saisons & épisodes : vu.
 
+> ⚠️ **Prérequis : `TMDB_API_KEY` configurée** (voir [Déploiement Docker](#déploiement-docker)). Sans elle, la synchro ne peut identifier aucun élément de ta bibliothèque et ne fera **rien**, même si tout le reste est correctement branché.
+
 **Mise en place (admin, une fois) :**
 
 1. Connecte ton serveur Jellyfin dans **Jellyboxd → Paramètres → Jellyfin** (URL + clé API Jellyfin). Cela crée/relie automatiquement un compte Jellyboxd pour chaque utilisateur Jellyfin.
-   - ⚠️ Si Jellyboxd tourne en Docker et Jellyfin sur l'hôte, utilise `http://host.docker.internal:8096` (pas `localhost`).
+   - ⚠️ Si Jellyboxd tourne en Docker et Jellyfin sur l'hôte, utilise `http://host.docker.internal:8096` (pas `localhost`, qui désignerait le conteneur lui-même).
 2. Installe le plugin **Jellyboxd Sync** dans Jellyfin (voir le [README du plugin](https://github.com/Lachrize/jellyfin-plugin-jellyboxd)).
-3. Dans la config du plugin : renseigne l'**URL Jellyboxd**, colle la **clé de synchronisation** (affichée dans **Paramètres → Synchronisation Jellyfin**), et **laisse « Jellyfin username » vide** (= tous les comptes).
+3. Dans la config du plugin : renseigne l'**URL Jellyboxd** — en général `http://localhost:3002` (le plugin tourne sur la même machine que le port Docker publié). **Évite une IP LAN (`192.168.x.x` / `10.x.x.x`) : elle marche un temps puis casse au prochain changement d'IP.** Colle la **clé de synchronisation** (affichée dans **Paramètres → Synchronisation Jellyfin**), et **laisse « Jellyfin username » vide** (= tous les comptes).
 
 C'est tout : tout le monde peut noter depuis Jellyfin **ou** Jellyboxd, sans configuration individuelle.
 
 > La clé `JELLYBOXD_SYNC_KEY` est auto-générée par le conteneur ; elle s'affiche pour l'admin dans Paramètres (et dans les logs Docker au démarrage).
+
+### Dépannage — « la synchro ne marche pas »
+
+Dans l'ordre des causes les plus fréquentes :
+
+1. **`TMDB_API_KEY` manquante (cause n°1).** Sans clé TMDB, l'app ne peut identifier aucun titre de ta bibliothèque → **rien ne sync**, dans aucun sens, même si tout le reste paraît vert.
+   - ⚠️ **Le conteneur lit `.env.docker`, pas `.env`** (le `.env` ne sert qu'au mode dev). Mets la clé dans `.env.docker`, puis recrée le conteneur.
+2. **Le conteneur n'a pas été recréé** après modif de `.env.docker`. `docker compose up -d` peut échouer **en silence** sur `The container name "/jellyboxd" is already in use` → l'ancien conteneur reste, ta nouvelle config n'est jamais chargée. Force-le :
+   ```bash
+   docker rm -f jellyboxd && docker compose up -d
+   ```
+   Vérifie que TMDB est bien chargée dans le conteneur en cours :
+   ```bash
+   docker exec jellyboxd sh -c "cat /proc/1/environ | tr '\0' '\n' | grep TMDB_API_KEY"
+   ```
+3. **Ça marchait, puis plus rien après un changement de réseau.** Ton IP LAN a changé. Repointe l'**URL Jellyboxd** du plugin sur `http://localhost:3002` et la connexion Jellyfin de l'app sur `http://host.docker.internal:8096` (adresses stables).
+4. **La connexion Jellyfin de l'app affiche une erreur (401).** La clé API Jellyfin a été révoquée (reset/réinstall de Jellyfin). Régénère-en une et reconnecte dans **Paramètres → Jellyfin**.
+
+Test rapide « le plugin atteint-il l'app ? » (doit répondre `200`) :
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Authorization: Bearer <clé-de-sync>' http://localhost:3002/api/sync/pending
+```
 
 ## PWA
 
