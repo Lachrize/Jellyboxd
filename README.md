@@ -185,11 +185,9 @@ docker compose logs -f jellyboxd  # (optionnel) suivre les logs
 
 Jellyboxd est alors disponible sur **http://localhost:3002**. La base SQLite vit dans `./data/jellyboxd.db`.
 
-**Optionnel** — pour personnaliser, copie `.env.docker.example` → `.env.docker` et règle ce que tu veux (`NEXT_PUBLIC_APP_URL` si tu n'es pas sur `localhost`, ou pour figer tes propres secrets). Pour juste *essayer* l'app, le fichier n'est pas obligatoire.
+**Optionnel** — copie `.env.docker.example` → `.env.docker` pour personnaliser (`TMDB_API_KEY` pour les affiches, `NEXT_PUBLIC_APP_URL` si tu n'es pas sur `localhost`, ou figer tes secrets). Pas obligatoire : tout marche sans.
 
-> ⚠️ **`TMDB_API_KEY` est indispensable dès que tu veux synchroniser une vraie bibliothèque Jellyfin.** Sans elle, l'app n'utilise que le catalogue de démo (~15 titres) et **ne peut identifier aucun film/série réel** → rien ne se synchronise. Ajoute `TMDB_API_KEY=…` dans `.env.docker` puis `docker compose up -d`. Voir [Activer la vraie data](#activer-la-vraie-data-tmdb).
->
-> 🪤 **Piège fréquent : en Docker, c'est `.env.docker` qui est lu — PAS `.env`.** Le `.env` ne sert qu'au mode dev (`npm run dev`) ; mettre `TMDB_API_KEY` dedans n'a **aucun effet** sur le conteneur. Si `.env.docker` n'existe pas encore : `cp .env.docker.example .env.docker`, renseigne `TMDB_API_KEY`, puis recrée le conteneur.
+> 💡 **Pas besoin de clé TMDB pour synchroniser.** La synchro (notes / vu / favoris) marche en zéro-config : Jellyboxd crée la fiche de chaque film/série à partir des infos envoyées par le plugin. Une clé `TMDB_API_KEY` ajoute seulement les **affiches, le casting et la recherche vivante** — voir [Activer la vraie data](#activer-la-vraie-data-tmdb). En Docker, elle va dans **`.env.docker`** (pas `.env`, qui ne sert qu'au mode dev).
 
 Pour arrêter : `docker compose down`.
 
@@ -213,7 +211,7 @@ Le repli seed fonctionne sans clé. Pour brancher le catalogue **réel** (recher
 
 Aucune autre modification — c'est tout l'intérêt de l'abstraction.
 
-> **Pourquoi c'est requis pour la synchro Jellyfin :** la synchro identifie chaque film/série par son **ID TMDB**. Un élément de ta bibliothèque n'est reconnu que si l'app peut le résoudre via TMDB — sans clé, l'app ne connaît que le catalogue de démo et **aucun titre réel ne matche** (dans aucun des deux sens).
+> **Pas nécessaire pour la synchro Jellyfin.** Elle fonctionne sans clé : Jellyboxd crée les fiches (titre, année, IDs) à partir des données envoyées par le plugin. TMDB n'ajoute que les **affiches, le casting et la recherche** — utile pour parcourir le catalogue dans l'app, pas pour synchroniser.
 
 ## Synchronisation Jellyfin (plugin)
 
@@ -225,14 +223,17 @@ Jellyboxd synchronise **notes, vu et favoris dans les deux sens** avec Jellyfin,
 - Jellyboxd → Jellyfin : l'app met les changements dans une file (`PendingSync`) que le plugin récupère toutes les ~3 s (`GET/POST /api/sync/pending`) et applique au bon utilisateur.
 - Films & séries entières : vu + note + favori. Saisons & épisodes : vu.
 
-> ⚠️ **Prérequis : `TMDB_API_KEY` configurée** (voir [Déploiement Docker](#déploiement-docker)). Sans elle, la synchro ne peut identifier aucun élément de ta bibliothèque et ne fera **rien**, même si tout le reste est correctement branché.
+> ✅ **Aucune clé TMDB requise.** La synchro marche en zéro-config (elle ajoute juste les affiches si tu mets une clé TMDB).
 
 **Mise en place (admin, une fois) :**
 
 1. Connecte ton serveur Jellyfin dans **Jellyboxd → Paramètres → Jellyfin** (URL + clé API Jellyfin). Cela crée/relie automatiquement un compte Jellyboxd pour chaque utilisateur Jellyfin.
-   - ⚠️ Si Jellyboxd tourne en Docker et Jellyfin sur l'hôte, utilise `http://host.docker.internal:8096` (pas `localhost`, qui désignerait le conteneur lui-même).
+   - ⚠️ **Quelle URL Jellyfin ?** Si **Jellyboxd** tourne en Docker et Jellyfin sur l'hôte → `http://host.docker.internal:8096` (pas `localhost`, qui désignerait le conteneur Jellyboxd).
 2. Installe le plugin **Jellyboxd Sync** dans Jellyfin (voir le [README du plugin](https://github.com/Lachrize/jellyfin-plugin-jellyboxd)).
-3. Dans la config du plugin : renseigne l'**URL Jellyboxd** — en général `http://localhost:3002` (le plugin tourne sur la même machine que le port Docker publié). **Évite une IP LAN (`192.168.x.x` / `10.x.x.x`) : elle marche un temps puis casse au prochain changement d'IP.** Colle la **clé de synchronisation** (affichée dans **Paramètres → Synchronisation Jellyfin**), et **laisse « Jellyfin username » vide** (= tous les comptes).
+3. Dans la config du plugin : renseigne l'**URL Jellyboxd**, colle la **clé de synchronisation** (affichée dans **Paramètres → Synchronisation Jellyfin**), et **laisse « Jellyfin username » vide** (= tous les comptes).
+   - ⚠️ **Quelle URL Jellyboxd ?** Ça dépend d'où tourne **Jellyfin** :
+     - Jellyfin **natif** (même machine que Jellyboxd) → `http://localhost:3002`.
+     - Jellyfin **en Docker / sur un NAS** → l'**IP de l'hôte** (`http://192.168.x.x:3002`) ou `http://host.docker.internal:3002`. **Jamais `localhost`** : dans le conteneur Jellyfin, `localhost` = le conteneur lui-même → `Connection refused`.
 
 C'est tout : tout le monde peut noter depuis Jellyfin **ou** Jellyboxd, sans configuration individuelle.
 
@@ -242,23 +243,14 @@ C'est tout : tout le monde peut noter depuis Jellyfin **ou** Jellyboxd, sans con
 
 Dans l'ordre des causes les plus fréquentes :
 
-1. **`TMDB_API_KEY` manquante (cause n°1).** Sans clé TMDB, l'app ne peut identifier aucun titre de ta bibliothèque → **rien ne sync**, dans aucun sens, même si tout le reste paraît vert.
-   - ⚠️ **Le conteneur lit `.env.docker`, pas `.env`** (le `.env` ne sert qu'au mode dev). Mets la clé dans `.env.docker`, puis recrée le conteneur.
-2. **Le conteneur n'a pas été recréé** après modif de `.env.docker`. `docker compose up -d` peut échouer **en silence** sur `The container name "/jellyboxd" is already in use` → l'ancien conteneur reste, ta nouvelle config n'est jamais chargée. Force-le :
+1. **Le plugin n'atteint pas l'app (`Connection refused` dans les logs Jellyfin).** Si **Jellyfin tourne en Docker**, l'URL Jellyboxd du plugin ne doit **pas** être `localhost:3002` (= le conteneur Jellyfin) mais l'**IP de l'hôte** ou `http://host.docker.internal:3002`. Test rapide (doit répondre `200`) :
    ```bash
-   docker rm -f jellyboxd && docker compose up -d
+   curl -s -o /dev/null -w '%{http_code}\n' -H 'Authorization: Bearer <clé-de-sync>' http://localhost:3002/api/sync/pending
    ```
-   Vérifie que TMDB est bien chargée dans le conteneur en cours :
-   ```bash
-   docker exec jellyboxd sh -c "cat /proc/1/environ | tr '\0' '\n' | grep TMDB_API_KEY"
-   ```
-3. **Ça marchait, puis plus rien après un changement de réseau.** Ton IP LAN a changé. Repointe l'**URL Jellyboxd** du plugin sur `http://localhost:3002` et la connexion Jellyfin de l'app sur `http://host.docker.internal:8096` (adresses stables).
-4. **La connexion Jellyfin de l'app affiche une erreur (401).** La clé API Jellyfin a été révoquée (reset/réinstall de Jellyfin). Régénère-en une et reconnecte dans **Paramètres → Jellyfin**.
-
-Test rapide « le plugin atteint-il l'app ? » (doit répondre `200`) :
-```bash
-curl -s -o /dev/null -w '%{http_code}\n' -H 'Authorization: Bearer <clé-de-sync>' http://localhost:3002/api/sync/pending
-```
+2. **Le conteneur Jellyboxd n'a pas été recréé** après modif de `.env.docker`. `docker compose up -d` peut échouer **en silence** sur `The container name "/jellyboxd" is already in use` → l'ancien conteneur reste. Force-le : `docker rm -f jellyboxd && docker compose up -d`.
+3. **Ça marchait, puis plus rien après un changement de réseau.** Ton IP LAN a changé : repointe l'URL Jellyboxd du plugin et la connexion Jellyfin de l'app (préfère `host.docker.internal` / une IP fixe).
+4. **La connexion Jellyfin de l'app affiche une erreur (401).** Clé API Jellyfin révoquée (reset/réinstall). Régénère-en une et reconnecte dans **Paramètres → Jellyfin**.
+5. **Un film s'est synchronisé mais sans affiche.** Normal : c'est une fiche basique créée sans TMDB. Ajoute `TMDB_API_KEY` dans `.env.docker` (pas `.env`) pour les affiches/casting. *La synchro, elle, marche sans.*
 
 ## PWA
 
