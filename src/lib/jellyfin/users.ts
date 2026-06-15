@@ -26,8 +26,13 @@ export async function provisionJellyfinUser(
   context: JellyfinProvisionContext,
 ): Promise<ProvisionedJellyfinUser> {
   const isAdmin = isJellyfinAdmin(jellyfinUser);
+  // Match by jellyfinUserId alone (not serverId): the sync endpoints auto-create
+  // accounts keyed only by jellyfinUserId (no serverId), so requiring a serverId
+  // match here would miss them and create a DUPLICATE account for the same
+  // Jellyfin user. The update below (re)sets serverId. A Jellyfin user maps to
+  // exactly one Jellyboxd account.
   const existing = await db.user.findFirst({
-    where: { jellyfinServerId: context.serverId, jellyfinUserId: jellyfinUser.Id },
+    where: { jellyfinUserId: jellyfinUser.Id },
     select: { id: true },
   });
 
