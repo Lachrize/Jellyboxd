@@ -19,12 +19,12 @@ import type { ActivityType } from "../src/lib/constants";
 const DAY = 24 * 60 * 60 * 1000;
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY);
 
-async function upsertUser(email: string, username: string, name: string, bio: string) {
+async function upsertUser(username: string, name: string, bio: string) {
   const passwordHash = await hashPassword("password123");
   return db.user.upsert({
-    where: { email },
+    where: { username },
     update: { name, bio },
-    create: { email, username, name, bio, passwordHash },
+    create: { username, name, bio, passwordHash },
   });
 }
 
@@ -49,9 +49,6 @@ async function resetDemoData(userIds: string[]) {
   await db.rating.deleteMany({ where: { userId: { in: userIds } } });
   await db.seriesProgress.deleteMany({ where: { userId: { in: userIds } } });
   await db.follow.deleteMany({ where: { followerId: { in: userIds } } });
-  await db.friendship.deleteMany({
-    where: { OR: [{ requesterId: { in: userIds } }, { addresseeId: { in: userIds } }] },
-  });
   await db.listItem.deleteMany({ where: { list: { userId: { in: userIds } } } });
   await db.list.deleteMany({ where: { userId: { in: userIds }, kind: { not: "WATCHLIST" } } });
 }
@@ -130,19 +127,16 @@ async function main() {
   console.log("→ Seeding Jellyboxd…");
 
   const alex = await upsertUser(
-    "alex@jellyboxd.app",
     "alex",
     "Alex Moreau",
     "Cinéphile du dimanche, sérievore le reste de la semaine. Villeneuve > tout.",
   );
   const mia = await upsertUser(
-    "mia@jellyboxd.app",
     "mia",
     "Mia Lefèvre",
     "Je note tout, je revois souvent. Drames coréens & A24.",
   );
   const theo = await upsertUser(
-    "theo@jellyboxd.app",
     "theo",
     "Théo Garnier",
     "SF, animation, et BO de Hans Zimmer en boucle.",
@@ -173,16 +167,7 @@ async function main() {
     resolveSeries("arcane"),
   ]);
 
-  // Friendships (all three demo users are friends so the feed is lively)
-  for (const [a, b] of [
-    [alex, mia],
-    [alex, theo],
-    [mia, theo],
-  ] as const) {
-    await db.friendship.create({
-      data: { requesterId: a.id, addresseeId: b.id, status: "ACCEPTED", respondedAt: daysAgo(20) },
-    });
-  }
+  // Everyone on the shared server is a friend by design — no friendship rows.
 
   // Alex — diary
   await logFilm(alex.id, dune!, {
@@ -199,7 +184,7 @@ async function main() {
     daysAgo: 15,
     review: "Troisième vision. Le twist sur le temps frappe encore plus fort quand on connaît la fin.",
   });
-  await logFilm(alex.id, br2049!, { rating: 8, daysAgo: 30, visibility: "PRIVATE" });
+  await logFilm(alex.id, br2049!, { rating: 8, daysAgo: 30 });
 
   // Mia — diary
   await logFilm(mia.id, parasite!, {
@@ -215,7 +200,7 @@ async function main() {
     review: "J'ai pleuré dans le métro après. Le in-yun, cette idée du destin tissé… bouleversant.",
   });
   await logFilm(mia.id, portrait!, { rating: 9, liked: true, daysAgo: 12 });
-  await logFilm(mia.id, whiplash!, { rating: 8, daysAgo: 18, visibility: "FRIENDS" });
+  await logFilm(mia.id, whiplash!, { rating: 8, daysAgo: 18 });
 
   // Théo — diary
   await logFilm(theo.id, eeaao!, {

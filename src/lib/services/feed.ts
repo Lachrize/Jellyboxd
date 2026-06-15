@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
 import { externalIdFor } from "@/lib/media/local";
-import { getFriendIds } from "@/lib/services/friends";
 import { mediaHref, seriesHref } from "@/lib/links";
 import { safeJsonParse } from "@/lib/utils";
 
@@ -126,28 +125,12 @@ async function loadFeedActivities(
   });
 }
 
-/** Activity stream from a user's friends (and themselves), honouring visibility. */
+/** Activity stream from everyone on the server (including the viewer). */
 export async function getFeed(userId: string, take = 30): Promise<FeedItem[]> {
-  const friendIds = await getFriendIds(userId);
-  return loadFeedActivities(
-    userId,
-    {
-      OR: [
-        { actorId: userId },
-        { actorId: { in: friendIds }, visibility: { in: ["PUBLIC", "FRIENDS"] } },
-      ],
-    },
-    take,
-  );
+  return loadFeedActivities(userId, {}, take);
 }
 
-/** Friend-only activity for the home social section. */
+/** Activity from everyone else for the home social section. */
 export async function getFriendsFeed(userId: string, take = 12): Promise<FeedItem[]> {
-  const friendIds = await getFriendIds(userId);
-  if (!friendIds.length) return [];
-  return loadFeedActivities(
-    userId,
-    { actorId: { in: friendIds }, visibility: { in: ["PUBLIC", "FRIENDS"] } },
-    take,
-  );
+  return loadFeedActivities(userId, { NOT: { actorId: userId } }, take);
 }

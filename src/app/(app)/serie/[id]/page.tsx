@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveSeries } from "@/lib/media/resolve";
 import { seasonHref } from "@/lib/links";
 import { getViewerMediaState } from "@/lib/media/viewer-state";
-import { getMediaReviewSections } from "@/lib/services/reviews";
+import { getMediaReviews } from "@/lib/services/reviews";
 import { getViewerActivityEntries } from "@/lib/services/viewer-activity";
 import { formatRuntime, formatYearRange } from "@/lib/utils";
 import type { SeriesStatus } from "@/lib/constants";
@@ -47,10 +47,10 @@ export default async function SeriesPage({ params }: Params) {
   const state = await getViewerMediaState(externalId, user?.id ?? null, resolved.providerName);
   const mediaRef = { provider: resolved.providerName, externalId, kind: "SERIES" };
 
-  const [reviewSections, viewerEntries] = await Promise.all([
+  const [reviews, viewerEntries] = await Promise.all([
     state.mediaItemId
-      ? getMediaReviewSections(state.mediaItemId, user?.id ?? null)
-      : Promise.resolve({ friends: [], community: [] }),
+      ? getMediaReviews(state.mediaItemId, user?.id ?? null)
+      : Promise.resolve([]),
     getViewerActivityEntries(user?.id, state.mediaItemId),
   ]);
   const totalEpisodes = series.seasons.reduce((sum, season) => sum + (season.episodeCount ?? 0), 0);
@@ -127,7 +127,6 @@ export default async function SeriesPage({ params }: Params) {
             initialInWatchlist={state.inWatchlist}
             initialLiked={state.liked}
             isAuthed={Boolean(user)}
-            defaultVisibility={user?.defaultVisibility ?? "PUBLIC"}
           />
           {user && totalEpisodes > 0 && (
             <div className="surface-card p-4">
@@ -216,19 +215,10 @@ export default async function SeriesPage({ params }: Params) {
           )}
 
           <ReviewSection
-            title="Critiques des amis"
-            emptyTitle="Aucune critique d'ami"
-            emptyDescription="Les avis visibles par vos amis apparaîtront ici."
-            reviews={reviewSections.friends}
-            isAuthed={Boolean(user)}
-            viewerUsername={user?.username}
-          />
-
-          <ReviewSection
-            title="Critiques de la communauté"
-            emptyTitle="Aucune critique publique pour l'instant"
-            emptyDescription="Les avis publics apparaîtront ici."
-            reviews={reviewSections.community}
+            title="Critiques"
+            emptyTitle="Aucune critique pour l'instant"
+            emptyDescription="Soyez le premier à donner votre avis."
+            reviews={reviews}
             isAuthed={Boolean(user)}
             viewerUsername={user?.username}
           />

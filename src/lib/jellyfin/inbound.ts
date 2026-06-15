@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { recordActivity } from "@/lib/services/activity";
-import { ensureSeenMedia } from "@/lib/services/seen";
+import { ensureSeenMedia, upsertRatingWatchEntry, clearRatingFromWatchEntries, pruneOrphanWatchEntries } from "@/lib/services/seen";
 import type { MediaKind } from "@/lib/constants";
 import { resolveJellyfinItem, type JellyfinProviderIds } from "./match";
 
@@ -146,6 +146,8 @@ export async function applyInboundEvent(
   if (fullSync && ratingDecision === "apply") {
     if (incomingRating == null) {
       await db.rating.deleteMany({ where: { userId, mediaItemId } });
+      // Keep the viewing in the journal, just drop its rating snapshot.
+      await clearRatingFromWatchEntries(userId, mediaItemId);
       if (recordActivities) {
         await db.activity.deleteMany({ where: { actorId: userId, mediaItemId, type: "RATED" } });
       }
@@ -156,6 +158,9 @@ export async function applyInboundEvent(
         create: { userId, mediaItemId, value: incomingRating },
       });
       await ensureSeenMedia(userId, mediaItemId);
+      // A Jellyfin rating is a viewing too: create/refresh the journal line,
+      // dated to the Jellyfin event so backfilled ratings keep their timeline.
+      await upsertRatingWatchEntry(userId, mediaItemId, incomingRating, { watchedOn: at });
       if (recordActivities) {
         await db.activity.deleteMany({ where: { actorId: userId, mediaItemId, type: "RATED" } });
         await recordActivity({ actorId: userId, type: "RATED", mediaItemId, data: { rating: incomingRating } });
@@ -223,6 +228,11 @@ export async function applyInboundEvent(
       favoritedAt: favoriteDecision === "skip" ? (link?.favoritedAt ?? null) : at,
     },
   });
+
+  // If this change left the item with no rating and no "seen" flag (e.g. the
+  // user un-watched + un-rated in Jellyfin), drop the rating-derived viewing so
+  // the title leaves the library/journal instead of lingering.
+  await pruneOrphanWatchEntries(userId, mediaItemId);
 
   return { ok: true, applied, mediaItemId };
 }

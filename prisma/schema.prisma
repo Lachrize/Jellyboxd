@@ -24,7 +24,6 @@ datasource db {
 
 model User {
   id           String   @id @default(cuid())
-  email        String   @unique
   username     String   @unique
   passwordHash String
   name         String?
@@ -54,9 +53,6 @@ model User {
   following Follow[] @relation("Follower")
   followers Follow[] @relation("Following")
 
-  friendshipsSent     Friendship[] @relation("FriendRequester")
-  friendshipsReceived Friendship[] @relation("FriendAddressee")
-
   syncLinks SyncLink[]
   pendingSyncs PendingSync[]
   claimCodes ClaimCode[]
@@ -78,24 +74,6 @@ model ClaimCode {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-}
-
-/// Mutual friendship with an explicit request/accept flow.
-/// A single row per pair (requester -> addressee). status: PENDING | ACCEPTED.
-model Friendship {
-  id          String    @id @default(cuid())
-  requesterId String
-  addresseeId String
-  status      String    @default("PENDING")
-  createdAt   DateTime  @default(now())
-  respondedAt DateTime?
-
-  requester User @relation("FriendRequester", fields: [requesterId], references: [id], onDelete: Cascade)
-  addressee User @relation("FriendAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
-
-  @@unique([requesterId, addresseeId])
-  @@index([addresseeId, status])
-  @@index([requesterId, status])
 }
 
 model Session {

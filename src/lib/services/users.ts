@@ -3,9 +3,8 @@ import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
 import { getOrCreateWatchlist } from "@/lib/services/lists";
 
-/** Shared local-account creation (mirrors the side effects of registration). */
+/** Shared account creation (every account originates from Jellyfin). */
 export async function createLocalUser(data: {
-  email: string;
   username: string;
   name?: string | null;
   passwordHash: string;
@@ -13,7 +12,6 @@ export async function createLocalUser(data: {
 }) {
   const user = await db.user.create({
     data: {
-      email: data.email,
       username: data.username,
       name: data.name ?? null,
       passwordHash: data.passwordHash,
@@ -45,18 +43,6 @@ export async function uniqueUsername(rawName: string): Promise<string> {
     if (!(await db.user.findUnique({ where: { username: candidate }, select: { id: true } }))) return candidate;
   }
   return `${root.slice(0, 16)}${Date.now().toString().slice(-6)}`;
-}
-
-/** Placeholder email for Jellyfin-origin accounts (they log in via SSO). */
-export async function uniqueEmail(username: string): Promise<string> {
-  const lower = username.toLowerCase();
-  const base = `${lower}@jellyfin.local`;
-  if (!(await db.user.findUnique({ where: { email: base }, select: { id: true } }))) return base;
-  for (let n = 2; n < 10_000; n++) {
-    const candidate = `${lower}+${n}@jellyfin.local`;
-    if (!(await db.user.findUnique({ where: { email: candidate }, select: { id: true } }))) return candidate;
-  }
-  return `${lower}.${Date.now()}@jellyfin.local`;
 }
 
 /** An unguessable hash so SSO-created accounts have no usable local password. */

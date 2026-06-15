@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { resolveMediaRef } from "@/lib/media/upsert";
 import { recordActivity } from "@/lib/services/activity";
 import { getOrCreateWatchlist } from "@/lib/services/lists";
-import { ensureSeenMedia } from "@/lib/services/seen";
+import { ensureSeenMedia, upsertRatingWatchEntry, clearRatingFromWatchEntries, pruneOrphanWatchEntries } from "@/lib/services/seen";
 import { pushToJellyfin } from "@/lib/jellyfin/outbound";
 import { slugify } from "@/lib/utils";
 import { logWatchSchema, rateSchema } from "@/lib/validation/tracking";
@@ -62,6 +62,11 @@ export async function rateAction(input: unknown): Promise<ActionResult> {
 
   if (parsed.data.value == null) {
     await db.rating.deleteMany({ where: { userId: user.id, mediaItemId } });
+    // Keep the viewing if still marked seen; otherwise drop its rating snapshot
+    // and prune the now-orphan auto-created entry.
+    await clearRatingFromWatchEntries(user.id, mediaItemId);
+    await pruneOrphanWatchEntries(user.id, mediaItemId);
+    await db.activity.deleteMany({ where: { actorId: user.id, mediaItemId, type: "RATED" } });
     await pushToJellyfin(user.id, mediaItemId, { rating: null });
   } else {
     await db.rating.upsert({
@@ -69,6 +74,9 @@ export async function rateAction(input: unknown): Promise<ActionResult> {
       update: { value: parsed.data.value, ...(visibility ? { visibility } : {}) },
       create: { userId: user.id, mediaItemId, value: parsed.data.value, ...(visibility ? { visibility } : {}) },
     });
+    // A rating is a viewing: create the journal entry on first rating, or just
+    // refresh its rating snapshot on an edit (never a duplicate line).
+    await upsertRatingWatchEntry(user.id, mediaItemId, parsed.data.value, { visibility });
     await db.activity.deleteMany({
       where: { actorId: user.id, mediaItemId, type: "RATED" },
     });
@@ -280,6 +288,8 @@ export async function setMediaWatchedAction(input: {
     await db.seenMedia.deleteMany({
       where: { userId: user.id, mediaItemId },
     });
+    // Un-watching with no rating leaves no reason to keep the auto viewing.
+    await pruneOrphanWatchEntries(user.id, mediaItemId);
   }
 
   const [seen, rating] = await Promise.all([

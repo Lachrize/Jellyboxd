@@ -4,7 +4,6 @@ import { validateSession } from "@/lib/auth/session";
 
 export type SafeUser = {
   id: string;
-  email: string;
   username: string;
   name: string | null;
   bio: string | null;
@@ -24,7 +23,6 @@ export const getCurrentUser = cache(async (): Promise<SafeUser | null> => {
   const { user } = result;
   return {
     id: user.id,
-    email: user.email,
     username: user.username,
     name: user.name,
     bio: user.bio,

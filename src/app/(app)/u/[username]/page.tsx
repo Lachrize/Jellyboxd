@@ -14,8 +14,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SectionTitle } from "@/components/media/detail-hero";
 import { MediaCard } from "@/components/media/media-card";
 import { ReviewCard } from "@/components/social/review-card";
-import { FriendButton, FriendRequestsList } from "@/components/social/friend-controls";
-import { getFriendCount, getFriendshipState, getIncomingRequests } from "@/lib/services/friends";
 import { formatDate } from "@/lib/dates";
 
 type Params = { params: Promise<{ username: string }> };
@@ -43,13 +41,11 @@ export default async function ProfilePage({ params }: Params) {
   const viewer = await getCurrentUser();
   const isSelf = viewer?.id === profile.id;
 
-  const [friendCount, filmsLogged, seriesTracked, reviewsCount, friendState, recent, favorites, reviews, lists, incomingRequests] =
+  const [filmsLogged, seriesTracked, reviewsCount, recent, favorites, reviews, lists] =
     await Promise.all([
-      getFriendCount(profile.id),
       countSeenFilms(profile.id),
       db.seriesProgress.count({ where: { userId: profile.id } }),
       db.review.count({ where: { userId: profile.id } }),
-      viewer ? getFriendshipState(viewer.id, profile.id) : Promise.resolve("none" as const),
       getUserLibrary(profile.id, viewer?.id ?? null, 10),
       getFavorites(profile.id, 12),
       getUserReviews(profile.id, viewer?.id ?? null, 4),
@@ -59,7 +55,6 @@ export default async function ProfilePage({ params }: Params) {
         take: 6,
         include: { _count: { select: { items: true } } },
       }),
-      isSelf ? getIncomingRequests(profile.id) : Promise.resolve([]),
     ]);
 
   return (
@@ -81,9 +76,7 @@ export default async function ProfilePage({ params }: Params) {
                   <Settings className="h-4 w-4" /> Modifier le profil
                 </Link>
               </Button>
-            ) : (
-              <FriendButton targetUserId={profile.id} initialState={friendState} isAuthed={Boolean(viewer)} />
-            )}
+            ) : null}
           </div>
 
           {profile.bio && <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-muted-foreground">{profile.bio}</p>}
@@ -92,20 +85,12 @@ export default async function ProfilePage({ params }: Params) {
             <Stat value={filmsLogged} label="Films" />
             <Stat value={seriesTracked} label="Séries" />
             <Stat value={reviewsCount} label="Critiques" />
-            <Stat value={friendCount} label="Amis" />
           </div>
           <p className="mt-4 flex items-center gap-1.5 text-xs text-muted">
             <CalendarDays className="h-3.5 w-3.5" /> Membre depuis {formatDate(profile.createdAt)}
           </p>
         </div>
       </header>
-
-      {isSelf && incomingRequests.length > 0 && (
-        <section>
-          <SectionTitle>Demandes d&apos;amis</SectionTitle>
-          <FriendRequestsList requests={incomingRequests} />
-        </section>
-      )}
 
       <section>
         <SectionTitle action={<Link href={`/u/${profile.username}/mediatheque`} className="text-sm text-muted-foreground link-underline">Voir tout</Link>}>

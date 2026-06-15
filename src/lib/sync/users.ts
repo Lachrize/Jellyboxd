@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { createLocalUser, randomPasswordHash, uniqueEmail, uniqueUsername } from "@/lib/services/users";
+import { createLocalUser, randomPasswordHash, uniqueUsername } from "@/lib/services/users";
 
 /**
  * Map a Jellyfin user id to the Jellyboxd account, creating it on first sight.
@@ -18,7 +18,6 @@ export async function resolveOrCreateJellyboxdUser(
 
   const name = opts.username?.trim() || `jf_${jellyfinUserId.slice(0, 8)}`;
   const created = await createLocalUser({
-    email: await uniqueEmail(name),
     username: await uniqueUsername(name),
     name,
     passwordHash: await randomPasswordHash(),

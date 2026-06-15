@@ -136,7 +136,7 @@ export async function getAdminDashboard({
     db.user.findMany({
       orderBy: { createdAt: "desc" },
       select: {
-        id: true, username: true, name: true, email: true, avatarUrl: true, isAdmin: true, jellyfinUserId: true, createdAt: true,
+        id: true, username: true, name: true, avatarUrl: true, isAdmin: true, jellyfinUserId: true, createdAt: true,
         _count: { select: { ratings: true, reviews: true, watchEntries: true, lists: true } },
       },
     }),

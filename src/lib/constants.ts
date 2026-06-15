@@ -42,23 +42,10 @@ export type ListKind = (typeof LIST_KINDS)[number];
 export const LIKE_TARGETS = ["REVIEW", "WATCH_ENTRY", "LIST", "COMMENT", "MEDIA"] as const;
 export type LikeTarget = (typeof LIKE_TARGETS)[number];
 
+// Retained only as the stored column's allowed values. Everything is PUBLIC now
+// (single shared Jellyfin server) — there is no in-app visibility choice.
 export const VISIBILITIES = ["PUBLIC", "FRIENDS", "PRIVATE"] as const;
 export type Visibility = (typeof VISIBILITIES)[number];
-
-export const VISIBILITY_LABELS: Record<Visibility, string> = {
-  PUBLIC: "Public",
-  FRIENDS: "Amis",
-  PRIVATE: "Privé",
-};
-
-export const VISIBILITY_HINTS: Record<Visibility, string> = {
-  PUBLIC: "Visible par tout le monde",
-  FRIENDS: "Visible par vos amis",
-  PRIVATE: "Visible par vous seul",
-};
-
-export const FRIENDSHIP_STATUSES = ["PENDING", "ACCEPTED"] as const;
-export type FriendshipStatus = (typeof FRIENDSHIP_STATUSES)[number];
 
 export const ACTIVITY_TYPES = [
   "LOGGED",

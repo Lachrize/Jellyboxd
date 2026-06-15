@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
-import { loginAction, registerAction, type AuthState } from "@/server/actions/auth";
+import { loginAction, type AuthState } from "@/server/actions/auth";
 
 function FormError({ message }: { message?: string }) {
   if (!message) return null;
@@ -50,26 +50,3 @@ export function LoginForm({ next, dark = false }: { next?: string; dark?: boolea
   );
 }
 
-export function RegisterForm() {
-  const [state, action, pending] = useActionState<AuthState, FormData>(registerAction, null);
-  return (
-    <form action={action} className="space-y-4">
-      <FormError message={state?.error} />
-      <Field label="E-mail" htmlFor="email" error={state?.fieldErrors?.email}>
-        <Input id="email" name="email" type="email" autoComplete="email" autoFocus required />
-      </Field>
-      <Field label="Pseudo" htmlFor="username" error={state?.fieldErrors?.username} hint="Lettres, chiffres et _ — visible publiquement.">
-        <Input id="username" name="username" autoComplete="username" required />
-      </Field>
-      <Field label="Nom (optionnel)" htmlFor="name" error={state?.fieldErrors?.name}>
-        <Input id="name" name="name" autoComplete="name" />
-      </Field>
-      <Field label="Mot de passe" htmlFor="password" error={state?.fieldErrors?.password} hint="8 caractères minimum.">
-        <Input id="password" name="password" type="password" autoComplete="new-password" required />
-      </Field>
-      <Button type="submit" size="lg" className="w-full" disabled={pending}>
-        {pending ? <Spinner /> : "Créer mon compte"}
-      </Button>
-    </form>
-  );
-}

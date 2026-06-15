@@ -25,12 +25,6 @@ async function searchUsers(query: string) {
       username: true,
       name: true,
       avatarUrl: true,
-      _count: {
-        select: {
-          friendshipsSent: { where: { status: "ACCEPTED" } },
-          friendshipsReceived: { where: { status: "ACCEPTED" } },
-        },
-      },
     },
     orderBy: [{ username: "asc" }],
     take: 6,
@@ -82,7 +76,6 @@ export default async function SearchPage({
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {users.map((user) => {
                   const displayName = user.name ?? `@${user.username}`;
-                  const friendCount = user._count.friendshipsSent + user._count.friendshipsReceived;
 
                   return (
                     <Link
@@ -95,7 +88,7 @@ export default async function SearchPage({
                         <p className="truncate font-medium text-foreground">{displayName}</p>
                         <p className="truncate text-sm text-muted">@{user.username}</p>
                         <p className="mt-1 truncate text-xs text-muted">
-                          {friendCount} ami{friendCount > 1 ? "s" : ""} · Voir le profil
+                          Voir le profil
                         </p>
                       </div>
                     </Link>

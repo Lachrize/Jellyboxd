@@ -4,7 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { Stars } from "@/components/ui/stars";
 import { LikeButton } from "./like-button";
 import { DeleteReviewButton } from "./review-actions";
-import { VisibilityBadge } from "@/components/ui/visibility-badge";
 import { profileHref } from "@/lib/links";
 import { timeAgo } from "@/lib/dates";
 
@@ -73,7 +72,6 @@ export function ReviewCard({
           isAuthed={isAuthed}
         />
         {canDelete && <DeleteReviewButton id={review.id} />}
-        {canDelete && review.visibility && <VisibilityBadge visibility={review.visibility} className="ml-auto" />}
       </footer>
     </article>
   );

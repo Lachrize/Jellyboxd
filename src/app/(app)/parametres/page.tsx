@@ -6,7 +6,6 @@ import { getJellyfinConnectionPreview } from "@/lib/jellyfin/config";
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ProfileForm } from "@/components/settings/profile-form";
-import { CredentialsForm } from "@/components/settings/credentials-form";
 import { JellyfinConnect } from "@/components/settings/jellyfin-connect";
 import { PluginSyncCard } from "@/components/settings/plugin-sync-card";
 
@@ -37,10 +36,12 @@ export default async function SettingsPage() {
         </Card>
       </section>
 
-      <section>
-        <h2 className="mb-3 font-serif text-lg text-foreground">Jellyfin</h2>
-        <JellyfinConnect connection={jellyfin} />
-      </section>
+      {user.isAdmin ? (
+        <section>
+          <h2 className="mb-3 font-serif text-lg text-foreground">Jellyfin</h2>
+          <JellyfinConnect connection={jellyfin} />
+        </section>
+      ) : null}
 
       {user.isAdmin && syncKey ? (
         <section>
@@ -54,18 +55,13 @@ export default async function SettingsPage() {
         <Card>
           <CardBody className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted">Adresse e-mail</span>
-              <span className="text-sm text-foreground">{user.email}</span>
-            </div>
-            <div className="flex items-center justify-between border-t border-border pt-3">
               <span className="text-sm text-muted">Nom d'utilisateur</span>
               <span className="text-sm text-foreground">@{user.username}</span>
             </div>
-          </CardBody>
-        </Card>
-        <Card className="mt-4">
-          <CardBody>
-            <CredentialsForm username={user.username} email={user.email} />
+            <div className="flex items-center justify-between border-t border-border pt-3">
+              <span className="text-sm text-muted">Connexion</span>
+              <span className="text-sm text-foreground">Compte Jellyfin</span>
+            </div>
           </CardBody>
         </Card>
       </section>

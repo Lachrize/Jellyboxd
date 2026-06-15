@@ -9,7 +9,6 @@ import { Stars } from "@/components/ui/stars";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
-import { VisibilityBadge } from "@/components/ui/visibility-badge";
 import { DeleteEntryButton } from "@/components/tracking/entry-actions";
 import { formatDate, formatMonthYear } from "@/lib/dates";
 import { truncate } from "@/lib/utils";
@@ -99,7 +98,6 @@ export default async function DiaryPage() {
                           )}
                           {e.liked && <Heart className="h-3.5 w-3.5 fill-accent text-accent" />}
                           <span className="text-xs text-muted">{formatDate(e.watchedOn)}</span>
-                          <VisibilityBadge visibility={e.visibility} />
                         </div>
                         {e.review && (
                           <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">

@@ -36,7 +36,9 @@ if [ -n "$DATABASE_URL" ]; then
   echo "Generating Prisma client..."
   npx prisma generate
   echo "Applying Prisma schema..."
-  npx prisma db push --skip-generate
+  # --accept-data-loss: the schema is the source of truth here, so dropped
+  # columns/tables (e.g. removed email + Friendship) are applied automatically.
+  npx prisma db push --skip-generate --accept-data-loss
 fi
 
 echo "Starting Jellyboxd on port ${PORT:-3000}..."

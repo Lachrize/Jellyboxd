@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bookmark, BookmarkCheck, Globe, Heart, Lock, Users } from "lucide-react";
+import { Bookmark, BookmarkCheck, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -10,7 +10,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { StarRatingInput } from "@/components/ui/star-rating-input";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
-import { VISIBILITIES, VISIBILITY_LABELS, type Visibility } from "@/lib/constants";
 import { logWatchAction, rateAction, toggleMediaLikeAction, toggleWatchlistAction } from "@/server/actions/tracking";
 import { SeenToggle } from "./seen-toggle";
 
@@ -19,8 +18,6 @@ export interface MediaRef {
   externalId: string;
   kind: string;
 }
-
-const VIS_ICON: Record<Visibility, typeof Globe> = { PUBLIC: Globe, FRIENDS: Users, PRIVATE: Lock };
 
 export function MediaActions({
   mediaRef,
@@ -32,7 +29,6 @@ export function MediaActions({
   initialLiked,
   isAuthed,
   allowRating = true,
-  defaultVisibility = "PUBLIC",
 }: {
   mediaRef: MediaRef;
   initialRating: number | null;
@@ -43,7 +39,6 @@ export function MediaActions({
   initialLiked: boolean;
   isAuthed: boolean;
   allowRating?: boolean;
-  defaultVisibility?: string;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -59,9 +54,6 @@ export function MediaActions({
   }, [initialWatched, initialRating]);
   const [inWatchlist, setInWatchlist] = useState(initialInWatchlist);
   const [liked, setLiked] = useState(initialLiked);
-  const [visibility, setVisibility] = useState<Visibility>(
-    (VISIBILITIES as readonly string[]).includes(defaultVisibility) ? (defaultVisibility as Visibility) : "PUBLIC",
-  );
 
   const [watchedOn, setWatchedOn] = useState(today);
   const [review, setReview] = useState("");
@@ -83,7 +75,7 @@ export function MediaActions({
     setRating(value);
     if (value != null) setSeen(true);
     startTransition(async () => {
-      const res = await rateAction({ ref: mediaRef, value, visibility });
+      const res = await rateAction({ ref: mediaRef, value });
       if (!res.ok) {
         setRating(prev);
         setSeen(prevSeen);
@@ -135,7 +127,6 @@ export function MediaActions({
         rating: allowRating ? rating : null,
         reviewBody: review,
         containsSpoilers: spoilers,
-        visibility,
         tags: tags
           .split(",")
           .map((t) => t.trim())
@@ -202,30 +193,6 @@ export function MediaActions({
         <Field label="Tags (séparés par des virgules)" htmlFor="tags">
           <Input id="tags" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="chef-d'œuvre, à revoir" />
         </Field>
-
-        <div>
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted">Visibilité</p>
-          <div className="grid grid-cols-3 gap-1.5">
-            {VISIBILITIES.map((v) => {
-              const Icon = VIS_ICON[v];
-              return (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setVisibility(v)}
-                  className={cn(
-                    "flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
-                    visibility === v
-                      ? "border-accent/40 bg-accent/12 text-accent"
-                      : "border-border text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" /> {VISIBILITY_LABELS[v]}
-                </button>
-              );
-            })}
-          </div>
-        </div>
 
         <Button onClick={save} disabled={pending} size="lg" className="w-full">
           {pending ? <Spinner /> : "Enregistrer le visionnage"}

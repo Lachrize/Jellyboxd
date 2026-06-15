@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { createLocalUser, randomPasswordHash, uniqueEmail, uniqueUsername } from "@/lib/services/users";
+import { createLocalUser, randomPasswordHash, uniqueUsername } from "@/lib/services/users";
 import { avatarPathFor } from "./avatar";
 import { buildConfig } from "./config";
 import type { JellyfinUser } from "./client";
@@ -42,7 +42,6 @@ export async function provisionJellyfinUser(
   if (!userId) {
     const username = await uniqueUsername(jellyfinUser.Name);
     const user = await createLocalUser({
-      email: await uniqueEmail(username),
       username,
       name: jellyfinUser.Name,
       passwordHash: await randomPasswordHash(),

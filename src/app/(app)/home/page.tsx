@@ -119,7 +119,7 @@ export default async function HomePage() {
               <p className="text-sm text-muted-foreground">Bienvenue</p>
               <h1 className="font-serif text-3xl text-foreground sm:text-4xl">Bonjour, {firstName}.</h1>
               <p className="mt-2 max-w-xl text-muted-foreground">
-                Votre espace pour retrouver vos favoris, suivre vos amis et découvrir quoi regarder ensuite.
+                Votre espace pour retrouver vos favoris, suivre la communauté et découvrir quoi regarder ensuite.
               </p>
             </div>
             <Button variant="secondary" size="sm" asChild>
@@ -133,7 +133,7 @@ export default async function HomePage() {
             <StatPill icon={Clapperboard} value={String(monthWatches)} label="Visionnages ce mois" />
             <StatPill icon={Film} value={String(filmsSeen)} label="Films vus" />
             <StatPill icon={Star} value={avgRating} label="Note moyenne" />
-            <StatPill icon={Users} value={String(friendCount)} label="Amis" />
+            <StatPill icon={Users} value={String(friendCount)} label="Membres" />
           </div>
         </div>
       </section>
@@ -201,16 +201,16 @@ export default async function HomePage() {
 
       <section>
         <SectionTitle action={<Link href="/search" className="text-sm text-muted-foreground link-underline">Rechercher</Link>}>
-          Activité des amis
+          Activité de la communauté
         </SectionTitle>
         {friendsFeed.length === 0 ? (
           <EmptyState
             icon={Users}
-            title="Pas encore d'activité d'amis"
-            description="Ajoutez des amis pour voir leurs notes, critiques et visionnages ici."
+            title="Pas encore d'activité"
+            description="Les notes, critiques et visionnages des autres membres apparaîtront ici."
             action={
               <Button asChild>
-                <Link href="/search">Trouver des amis</Link>
+                <Link href="/explore">Explorer le catalogue</Link>
               </Button>
             }
           />

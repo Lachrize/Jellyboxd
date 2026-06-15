@@ -31,9 +31,6 @@ export function CreateListDialog() {
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input type="checkbox" name="isRanked" className="accent-accent" /> Liste classée (ordonnée)
             </label>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input type="checkbox" name="isPublic" defaultChecked className="accent-accent" /> Publique
-            </label>
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>

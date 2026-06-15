@@ -8,7 +8,7 @@ import { resolveEpisode } from "@/lib/media/resolve";
 import { episodeExternalId, seasonExternalId } from "@/lib/media";
 import { getViewerMediaState } from "@/lib/media/viewer-state";
 import { seasonHref } from "@/lib/links";
-import { getMediaReviewSections } from "@/lib/services/reviews";
+import { getMediaReviews } from "@/lib/services/reviews";
 import { formatRuntime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { FactsCard, SectionTitle } from "@/components/media/detail-hero";
@@ -47,10 +47,10 @@ export default async function EpisodePage({ params }: Params) {
   ]);
   const parentWatched = seriesState.watched || seasonState.watched;
 
-  const [reviewSections, viewerEntries] = await Promise.all([
+  const [reviews, viewerEntries] = await Promise.all([
     state.mediaItemId
-      ? getMediaReviewSections(state.mediaItemId, user?.id ?? null)
-      : Promise.resolve({ friends: [], community: [] }),
+      ? getMediaReviews(state.mediaItemId, user?.id ?? null)
+      : Promise.resolve([]),
     user && state.mediaItemId
       ? db.watchEntry.findMany({
           where: { userId: user.id, mediaItemId: state.mediaItemId },
@@ -141,19 +141,10 @@ export default async function EpisodePage({ params }: Params) {
           )}
 
           <ReviewSection
-            title="Critiques des amis"
-            emptyTitle="Aucune critique d'ami"
-            emptyDescription="Les avis visibles par vos amis apparaîtront ici."
-            reviews={reviewSections.friends}
-            isAuthed={Boolean(user)}
-            viewerUsername={user?.username}
-          />
-
-          <ReviewSection
-            title="Critiques de la communauté"
-            emptyTitle="Aucune critique publique pour l'instant"
-            emptyDescription="Les avis publics apparaîtront ici."
-            reviews={reviewSections.community}
+            title="Critiques"
+            emptyTitle="Aucune critique pour l'instant"
+            emptyDescription="Soyez le premier à donner votre avis."
+            reviews={reviews}
             isAuthed={Boolean(user)}
             viewerUsername={user?.username}
           />
