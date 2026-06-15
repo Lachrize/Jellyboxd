@@ -6,7 +6,8 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { getMediaProvider } from "@/lib/media";
 import { resolveMediaRef } from "@/lib/media/upsert";
-import { ensureSeenMedia } from "@/lib/services/seen";
+import { ensureSeenMedia, upsertRatingWatchEntry } from "@/lib/services/seen";
+import { pushToJellyfin } from "@/lib/jellyfin/outbound";
 import { assertSafeUrl } from "@/lib/security/ssrf";
 import { slugify } from "@/lib/utils";
 import type { MediaProviderName } from "@/lib/constants";
@@ -369,6 +370,10 @@ export async function importLetterboxdRatingsAction(
       },
     });
     await ensureSeenMedia(user.id, mediaItemId);
+    // A rating is a viewing: add the journal line (dated to the Letterboxd
+    // rating date) and mirror the rating + "watched" to Jellyfin.
+    await upsertRatingWatchEntry(user.id, mediaItemId, rating, { watchedOn: ratedOn });
+    await pushToJellyfin(user.id, mediaItemId, { rating, played: true });
 
     return { status: existing ? ("updated" as const) : ("imported" as const) };
   });
@@ -383,6 +388,7 @@ export async function importLetterboxdRatingsAction(
 
   revalidatePath("/import");
   revalidatePath("/stats");
+  revalidatePath("/journal");
   revalidatePath(`/u/${user.username}`);
   revalidatePath("/home");
 
