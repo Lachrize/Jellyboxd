@@ -3,7 +3,7 @@ import { slugify } from "@/lib/utils";
 import type { MediaRefInput } from "@/lib/validation/media";
 import { getMediaProvider } from "./index";
 import { parseEpisodeExternalId, parseSeasonExternalId, seasonExternalId } from "./refs";
-import type { GenreDTO, MovieDetail, SeriesDetail } from "./types";
+import type { GenreDTO, MediaSummary, MovieDetail, SeriesDetail } from "./types";
 
 const provider = () => getMediaProvider();
 
@@ -61,6 +61,39 @@ async function ensureMovie(providerName: string, externalId: string): Promise<st
       genres: await genreConnect(detail.genres),
       movie: { create: { director: detail.director ?? null, certification: detail.certification ?? null } },
       externalMappings: { create: { provider: providerName, externalId } },
+    },
+    select: { id: true },
+  });
+  return item.id;
+}
+
+/**
+ * Materialise a movie spine from a lightweight search summary WITHOUT a per-item
+ * detail fetch — built for bulk imports where speed matters. The summary already
+ * carries everything cards/journal/profile need (title, year, poster, mapping);
+ * the detail page fetches full data live from the provider on view, so nothing
+ * is lost. Mapping-checked so re-runs and concurrent rows dedupe.
+ */
+export async function ensureMovieFromSummary(summary: MediaSummary): Promise<string | null> {
+  const existing = await findByMapping(summary.provider, summary.externalId);
+  if (existing) return existing;
+
+  const item = await db.mediaItem.create({
+    data: {
+      kind: "MOVIE",
+      slug: buildSlug(summary.title, summary.year, "movie", summary.externalId),
+      title: summary.title,
+      sortTitle: summary.title,
+      originalTitle: summary.originalTitle ?? null,
+      overview: summary.overview ?? null,
+      year: summary.year,
+      posterUrl: summary.posterUrl,
+      backdropUrl: summary.backdropUrl,
+      voteAverage: summary.voteAverage,
+      popularity: summary.popularity,
+      genres: await genreConnect(summary.genres),
+      movie: { create: {} },
+      externalMappings: { create: { provider: summary.provider, externalId: summary.externalId } },
     },
     select: { id: true },
   });

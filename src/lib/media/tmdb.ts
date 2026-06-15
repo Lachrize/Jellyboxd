@@ -41,16 +41,31 @@ async function tmdbFetch<T>(path: string, params: Record<string, string | number
   if (!key.includes(".")) url.searchParams.set("api_key", key);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
 
-  try {
-    const res = await fetch(url, {
-      headers: authHeaders(key),
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
+  // Retry transient failures (notably 429 rate-limits under the bulk importer's
+  // concurrency) so films aren't silently skipped. Honour Retry-After when given.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const res = await fetch(url, {
+        headers: authHeaders(key),
+        next: { revalidate: 3600 },
+      });
+      if (res.ok) return (await res.json()) as T;
+      if ((res.status === 429 || res.status >= 500) && attempt < 2) {
+        const retryAfter = Number(res.headers.get("retry-after"));
+        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 250 * (attempt + 1);
+        await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 2000)));
+        continue;
+      }
+      return null;
+    } catch {
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+        continue;
+      }
+      return null;
+    }
   }
+  return null;
 }
 
 const yearOf = (date?: string | null) =>
