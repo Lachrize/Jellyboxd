@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { getMediaProvider } from "@/lib/media";
-import { ensureMovieFromSummary } from "@/lib/media/upsert";
+import { ensureMovieFromSummary, ensureMovieFromLetterboxd } from "@/lib/media/upsert";
 import { ensureSeenMedia, upsertRatingWatchEntry } from "@/lib/services/seen";
 import { pushToJellyfin } from "@/lib/jellyfin/outbound";
 import { slugify } from "@/lib/utils";
@@ -156,10 +156,11 @@ export async function importLetterboxdRatingsAction(
   }
 
   const entries = rows.slice(headerRowIndex + 1);
-  // Resolve each distinct (title, year) to a TMDB summary exactly once: a single
-  // cached network call per distinct film — no per-row Letterboxd page scrape,
-  // no redundant search — and the spine is materialised straight from that
-  // summary (no detail fetch). The import is then bound by one lookup per film.
+  // Resolve each distinct (title, year) once. When a TMDB key is configured we
+  // do a single cached search per film (rich spine + poster + a TMDB id the
+  // plugin can match in the Jellyfin library). With NO key, the search returns
+  // nothing instantly (no network) and we fall back to a minimal spine from the
+  // CSV row alone — so the import is fully zero-config, like the rest of the app.
   const summaryCache = new Map<string, ReturnType<typeof resolveLetterboxdMovie>>();
   const mediaItemCache = new Map<string, Promise<string | null>>();
 
@@ -181,14 +182,12 @@ export async function importLetterboxdRatingsAction(
       summaryCache.set(searchKey, matchPromise);
     }
     const match = await matchPromise;
-    if (!match) {
-      return { status: "skipped" as const, title, year };
-    }
 
-    const mediaKey = `${match.provider}:${match.externalId}`;
+    // TMDB match -> rich, Jellyfin-matchable; otherwise a minimal zero-config spine.
+    const mediaKey = match ? `TMDB:${match.externalId}` : `LBX:${searchKey}`;
     let mediaItemPromise = mediaItemCache.get(mediaKey);
     if (!mediaItemPromise) {
-      mediaItemPromise = ensureMovieFromSummary(match);
+      mediaItemPromise = match ? ensureMovieFromSummary(match) : ensureMovieFromLetterboxd(title, year);
       mediaItemCache.set(mediaKey, mediaItemPromise);
     }
     const mediaItemId = await mediaItemPromise;
@@ -214,10 +213,11 @@ export async function importLetterboxdRatingsAction(
       },
     });
     await ensureSeenMedia(user.id, mediaItemId);
-    // A rating is a viewing: add the journal line (dated to the Letterboxd
-    // rating date) and mirror the rating + "watched" to Jellyfin.
+    // A rating is a viewing: add the journal line (dated to the Letterboxd date).
     await upsertRatingWatchEntry(user.id, mediaItemId, rating, { watchedOn: ratedOn });
-    await pushToJellyfin(user.id, mediaItemId, { rating, played: true });
+    // Mirror to Jellyfin only when we have a TMDB id — that's how the plugin
+    // finds the film in the Jellyfin library. Minimal/seed spines can't be matched.
+    if (match?.provider === "TMDB") await pushToJellyfin(user.id, mediaItemId, { rating, played: true });
 
     return { status: existing ? ("updated" as const) : ("imported" as const) };
   });

@@ -60,4 +60,9 @@ export async function pruneOrphanWatchEntries(userId: string, mediaItemId: strin
   ]);
   if (seen || rating) return; // still watched or rated -> keep the viewing
   await db.watchEntry.deleteMany({ where: { userId, mediaItemId, reviewId: null } });
+  // Nothing left to surface -> drop the stale feed activity too, otherwise other
+  // members keep seeing "X a journalisé …" for something X has fully removed.
+  await db.activity.deleteMany({
+    where: { actorId: userId, mediaItemId, type: { in: ["LOGGED", "RATED", "EPISODE_WATCHED"] } },
+  });
 }

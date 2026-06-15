@@ -100,6 +100,42 @@ export async function ensureMovieFromSummary(summary: MediaSummary): Promise<str
   return item.id;
 }
 
+/**
+ * Last-resort movie spine from a CSV row alone (title + year) when no provider
+ * can enrich it — e.g. a Letterboxd import with no TMDB key. Keyed by a
+ * synthetic LETTERBOXD mapping so re-imports dedupe. No poster/detail link
+ * (no provider can serve it), but the title shows in profile/journal/lists.
+ */
+export async function ensureMovieFromLetterboxd(title: string, year: number | null): Promise<string | null> {
+  const trimmed = title.trim();
+  if (!trimmed) return null;
+  const externalId = slugify([trimmed, year ?? ""].filter(Boolean).join("-"));
+  if (!externalId) return null;
+
+  const existing = await findByMapping("LETTERBOXD", externalId);
+  if (existing) return existing;
+
+  try {
+    const item = await db.mediaItem.create({
+      data: {
+        kind: "MOVIE",
+        slug: buildSlug(trimmed, year, "movie", `lbx-${externalId}`),
+        title: trimmed,
+        sortTitle: trimmed,
+        year,
+        releaseDate: year ? new Date(Date.UTC(year, 0, 1)) : null,
+        movie: { create: {} },
+        externalMappings: { create: { provider: "LETTERBOXD", externalId } },
+      },
+      select: { id: true },
+    });
+    return item.id;
+  } catch {
+    // Lost a race or slug clash -> return whatever now holds this mapping.
+    return findByMapping("LETTERBOXD", externalId);
+  }
+}
+
 async function ensureSeries(
   providerName: string,
   externalId: string,

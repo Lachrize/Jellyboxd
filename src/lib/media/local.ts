@@ -10,7 +10,16 @@ type Mapping = { provider: string; externalId: string };
 export function externalIdFor(mappings: Mapping[] | undefined | null): string | null {
   if (!mappings?.length) return null;
   const name = getMediaProvider().name;
-  return mappings.find((m) => m.provider === name)?.externalId ?? mappings[0]!.externalId;
+  // Only providers that can actually serve a detail page yield a working link.
+  // JELLYFIN (reverse-lookup cache) and LETTERBOXD (zero-config import spine)
+  // can't, so an item that only carries those stays unlinked instead of
+  // pointing at a dead /film/<id> route.
+  const LINKABLE = new Set([name, "TMDB", "SEED"]);
+  return (
+    mappings.find((m) => m.provider === name)?.externalId ??
+    mappings.find((m) => LINKABLE.has(m.provider))?.externalId ??
+    null
+  );
 }
 
 export interface LocalMediaLinkInput {
