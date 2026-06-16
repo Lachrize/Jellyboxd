@@ -116,6 +116,22 @@ export async function getPendingChanges(): Promise<PendingChangeDto[]> {
 }
 
 /**
+ * Every Jellyfin item Jellyboxd has set a RATING on (per user), as
+ * (jellyfinUserId, jellyfinItemId) pairs. The plugin reads this on uninstall to
+ * remove exactly the notes it pushed into Jellyfin — and nothing else (played /
+ * favourite, which may predate Jellyboxd, are left untouched).
+ */
+export async function getSyncedRatedItems(): Promise<{ jellyfinUserId: string; jellyfinItemId: string }[]> {
+  const rows = await db.syncLink.findMany({
+    where: { rating: { not: null }, jellyfinItemId: { not: null }, user: { jellyfinUserId: { not: null } } },
+    select: { jellyfinItemId: true, user: { select: { jellyfinUserId: true } } },
+  });
+  return rows
+    .filter((r) => r.user.jellyfinUserId && r.jellyfinItemId)
+    .map((r) => ({ jellyfinUserId: r.user.jellyfinUserId as string, jellyfinItemId: r.jellyfinItemId as string }));
+}
+
+/**
  * Drop acked rows, but only if they haven't changed since the plugin read them
  * (`updatedAt` must match). A note re-edited between pull and ack survives.
  */
