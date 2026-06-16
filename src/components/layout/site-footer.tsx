@@ -13,7 +13,6 @@ export function SiteFooter() {
         </div>
         <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
           <Link href="/explore" className="link-underline">Explorer</Link>
-          <Link href="/import" className="link-underline">Importer</Link>
           <Link href="/parametres" className="link-underline">Paramètres</Link>
           <span className="text-muted">© {new Date().getFullYear()} Jellyboxd</span>
         </nav>

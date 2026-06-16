@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { Download, LogOut } from "lucide-react";
 import { requireUser } from "@/lib/auth/current-user";
 import { logoutAction } from "@/server/actions/auth";
 import { getJellyfinConnectionPreview } from "@/lib/jellyfin/config";
@@ -62,6 +63,20 @@ export default async function SettingsPage() {
               <span className="text-sm text-muted">Connexion</span>
               <span className="text-sm text-foreground">Compte Jellyfin</span>
             </div>
+          </CardBody>
+        </Card>
+      </section>
+
+      <section>
+        <h2 className="mb-3 font-serif text-lg text-foreground">Importer</h2>
+        <Card>
+          <CardBody className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">Importez vos notes depuis Letterboxd.</p>
+            <Button variant="secondary" size="sm" asChild>
+              <Link href="/import">
+                <Download className="h-4 w-4" /> Importer
+              </Link>
+            </Button>
           </CardBody>
         </Card>
       </section>
