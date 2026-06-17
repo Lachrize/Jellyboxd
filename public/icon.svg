@@ -1,7 +1,50 @@
-<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="128" fill="#faf7fd"/>
-  <rect x="72" y="72" width="368" height="368" rx="112" fill="#ffffff" stroke="#ddd5eb" stroke-width="20"/>
-  <path d="M306 132v176c0 49-30 80-80 80-35 0-62-14-78-40" fill="none" stroke="#7c3aed" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M352 132H242" fill="none" stroke="#7c3aed" stroke-width="48" stroke-linecap="round" opacity="0.55"/>
-  <circle cx="356" cy="356" r="32" fill="#7c3aed" opacity="0.9"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="jb-bell" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#B354D9"></stop>
+      <stop offset="0.55" stop-color="#5C6FE0"></stop>
+      <stop offset="1" stop-color="#00A4DC"></stop>
+    </linearGradient>
+    <linearGradient id="jb-bell-inner" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.45"></stop>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"></stop>
+    </linearGradient>
+    <linearGradient id="jb-tent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6A4ECB"></stop>
+      <stop offset="1" stop-color="#2C6FD8"></stop>
+    </linearGradient>
+    <radialGradient id="jb-iconbg" cx="0.5" cy="0.42" r="0.75">
+      <stop offset="0" stop-color="#2b3f8a"></stop>
+      <stop offset="0.55" stop-color="#131c47"></stop>
+      <stop offset="1" stop-color="#0a1233"></stop>
+    </radialGradient>
+    <radialGradient id="jb-iconglow" cx="0.5" cy="0.44" r="0.58">
+      <stop offset="0" stop-color="#7E9BFF" stop-opacity="0.25"></stop>
+      <stop offset="1" stop-color="#7E9BFF" stop-opacity="0"></stop>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="114" fill="url(#jb-iconbg)"></rect>
+  <rect width="512" height="512" rx="114" fill="url(#jb-iconglow)"></rect>
+  <g transform="translate(106,94) scale(1.5)">
+    <g fill="none" stroke="url(#jb-tent)" stroke-width="8.5" stroke-linecap="round">
+      <path d="M66,118 C60,136 72,148 64,166 C58,180 60,192 56,204"></path>
+      <path d="M83,122 C79,142 91,154 85,174 C81,190 82,198 80,208"></path>
+      <path d="M100,124 C98,144 106,158 100,178 C96,194 99,202 100,210"></path>
+      <path d="M117,122 C121,142 109,154 115,174 C119,190 118,198 120,208"></path>
+      <path d="M134,118 C140,136 128,148 136,166 C142,180 140,192 144,204"></path>
+    </g>
+    <path d="M38,110 C38,62 64,32 100,32 C136,32 162,62 162,110 Q146.5,128 131,112 Q115.5,128 100,112 Q84.5,128 69,112 Q53.5,128 38,110 Z" fill="url(#jb-bell)"></path>
+    <path d="M52,78 C58,52 78,40 100,40 C122,40 142,52 148,78 C130,62 110,58 100,58 C90,58 70,62 52,78 Z" fill="url(#jb-bell-inner)"></path>
+    <g>
+      <ellipse cx="86" cy="80" rx="15.5" ry="17.5" fill="#fff" stroke="#101a44" stroke-width="2.4"></ellipse>
+      <ellipse cx="116" cy="82" rx="14.5" ry="16.5" fill="#fff" stroke="#101a44" stroke-width="2.4"></ellipse>
+      <circle cx="89" cy="84" r="9.2" fill="#101a44"></circle>
+      <circle cx="118" cy="86" r="8.6" fill="#101a44"></circle>
+      <circle cx="85.5" cy="80" r="3.1" fill="#fff"></circle>
+      <circle cx="114.8" cy="82" r="2.8" fill="#fff"></circle>
+    </g>
+    <circle cx="156" cy="58" r="6.5" fill="#FF8000"></circle>
+    <circle cx="168" cy="78" r="4.5" fill="#00E054"></circle>
+    <circle cx="36" cy="70" r="5.5" fill="#40BCF4"></circle>
+  </g>
 </svg>

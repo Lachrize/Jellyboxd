@@ -1,9 +1,16 @@
 <div align="center">
 
+![Jellyboxd Banner](https://raw.githubusercontent.com/Lachrize/jellyboxd/main/public/mascot.svg#gh-light-mode-only)
+![Jellyboxd Banner](https://raw.githubusercontent.com/Lachrize/jellyboxd/main/public/mascot.svg#gh-dark-mode-only)
+
 # Jellyboxd
 
 **Le carnet de tout ce que vous regardez.**
 PWA sociale de tracking, notation et critique — films **et** séries, nativement.
+
+[![Deploy with Docker](https://img.shields.io/badge/Deploy-Docker-2496ed?logo=docker)](https://github.com/Lachrize/jellyboxd)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178c6?logo=typescript)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs)](https://nextjs.org/)
 
 </div>
 
@@ -254,7 +261,7 @@ Dans l'ordre des causes les plus fréquentes :
 
 ## PWA
 
-- `public/manifest.webmanifest` + `public/icon.svg` (installable, splash, thème sombre)
+- `public/manifest.webmanifest` + icônes PNG/SVG (installable, splash, thème sombre)
 - `public/sw.js` : service worker (navigations *network-first* avec repli cache + shell offline), enregistré **en production uniquement**
 - Bottom-nav mobile, zones tactiles, `safe-area`, animations discrètes
 

@@ -27,15 +27,19 @@ export const metadata: Metadata = {
     siteName: APP_NAME,
   },
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    icon: [{ url: "/icon.svg", type: "image/svg+xml", sizes: "any" }],
+    apple: [
+      { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
+      { url: "/icon-1024.png", type: "image/png", sizes: "1024x1024" },
+    ],
+    shortcut: [{ url: "/icon-512.png", type: "image/png", sizes: "512x512" }],
   },
 };
 
 export const viewport: Viewport = {
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#faf7fd" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f0b14" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a1233" },
   ],
   width: "device-width",
   initialScale: 1,
