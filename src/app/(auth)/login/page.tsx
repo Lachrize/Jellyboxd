@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { LoginForm } from "@/components/auth/auth-forms";
-import { LogoMark } from "@/components/ui/logo";
+import { LogoMarkLarge } from "@/components/ui/logo";
 import { SetupSteps } from "@/components/settings/setup-steps";
 import { SetupBackdrop, getBackdrops } from "@/components/settings/setup-backdrop";
 
@@ -21,8 +21,8 @@ export default async function LoginPage({
       <section className="relative flex min-h-full items-center justify-center px-5 py-12">
         <div className="w-full max-w-md">
           <div className="flex flex-col items-center text-center">
-            <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-indigo-500/15 ring-1 ring-indigo-400/30">
-              <LogoMark className="h-12 w-12" />
+            <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-indigo-500/15 ring-1 ring-indigo-400/30">
+              <LogoMarkLarge className="h-16 w-16" />
             </div>
             <h1 className="font-sans text-5xl font-bold tracking-tight text-white drop-shadow-lg">
               Jellyboxd

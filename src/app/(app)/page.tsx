@@ -4,7 +4,7 @@ import { AlertTriangle, LogIn } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getPrimaryJellyfinServer } from "@/lib/jellyfin/config";
 import { Button } from "@/components/ui/button";
-import { LogoMark } from "@/components/ui/logo";
+import { LogoMarkLarge } from "@/components/ui/logo";
 import { JellyfinConnect } from "@/components/settings/jellyfin-connect";
 import { SetupSteps } from "@/components/settings/setup-steps";
 import { SetupBackdrop, getBackdrops } from "@/components/settings/setup-backdrop";
@@ -21,8 +21,8 @@ export default async function LandingPage() {
         <SetupBackdrop backdrops={backdrops} />
         <section className="relative flex min-h-full items-center justify-center px-5 py-16">
           <div className="w-full max-w-lg rounded-2xl border border-white/15 bg-gray-900/30 px-10 py-12 text-center shadow-2xl shadow-black/50 backdrop-blur-[2px]">
-            <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-indigo-500/15 ring-1 ring-indigo-400/30">
-              <LogoMark className="h-14 w-14" />
+            <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full bg-indigo-500/15 ring-1 ring-indigo-400/30">
+              <LogoMarkLarge className="h-20 w-20" />
             </div>
             <h1 className="font-sans text-6xl font-bold tracking-tight text-white drop-shadow-lg">
               Jellyboxd
@@ -54,8 +54,8 @@ export default async function LandingPage() {
       <section className="relative flex min-h-full items-center justify-center px-5 py-12">
         <div className="w-full max-w-2xl">
           <div className="flex flex-col items-center text-center">
-            <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-indigo-500/15 ring-1 ring-indigo-400/30">
-              <LogoMark className="h-12 w-12" />
+            <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-indigo-500/15 ring-1 ring-indigo-400/30">
+              <LogoMarkLarge className="h-16 w-16" />
             </div>
             <h1 className="font-sans text-5xl font-bold tracking-tight text-white">
               Jellyboxd
